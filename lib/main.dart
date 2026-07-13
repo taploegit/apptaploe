@@ -1,0 +1,34 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'src/app.dart';
+import 'src/config.dart';
+import 'src/state.dart';
+import 'src/utils.dart';
+
+Future<void> main() async {
+  await runZonedGuarded<Future<void>>(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      await Supabase.initialize(
+        url: TaploeConfig.supabaseUrl,
+        publishableKey: TaploeConfig.supabaseAnonKey,
+      );
+
+      usePathUrlStrategy();
+
+      taploeState.startAuthListener();
+      await taploeState.bootstrap();
+
+      runApp(const TaploeApp());
+    },
+    (error, _) {
+      debugPrint('[Taploe] Se capturó un error asíncrono.');
+      safePrintError(error);
+    },
+  );
+}
