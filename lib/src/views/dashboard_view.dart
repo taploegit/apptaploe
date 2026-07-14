@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image/image.dart' as img;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -154,7 +156,7 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _content() {
     switch (section) {
       case DashboardSection.home:
-        return const HomeOverviewView();
+        return HomeOverviewView(onSelected: (s) => setState(() => section = s));
       case DashboardSection.profile:
         return ProfileEditorView(initialStep: widget.initialProfileStep);
       case DashboardSection.cards:
@@ -323,6 +325,10 @@ class _TopHeader extends StatelessWidget {
                           icon: Icons.error_outline_rounded,
                         ),
                       ),
+                    _NotificationBell(
+                      onOpenLeads: () => onSelected(DashboardSection.leads),
+                    ),
+                    const SizedBox(width: 10),
                     TaploeButton(
                       width: 154,
                       label: 'Ver perfil',
@@ -372,6 +378,342 @@ class _TopHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotificationBell extends StatefulWidget {
+  final VoidCallback onOpenLeads;
+
+  const _NotificationBell({required this.onOpenLeads});
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  List<AppNotificationModel> notifications = const [];
+  bool loading = false;
+
+  int get unreadCount =>
+      notifications.where((notification) => notification.isUnread).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final user = taploeState.currentUser;
+    if (user == null) return;
+    if (mounted) setState(() => loading = true);
+    final rows = await NotificationRepository.fetchRecent(user.id);
+    if (mounted) {
+      setState(() {
+        notifications = rows;
+        loading = false;
+      });
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    final user = taploeState.currentUser;
+    if (user == null) return;
+    await NotificationRepository.markAllAsRead(user.id);
+    await _load();
+  }
+
+  Future<void> _openNotification(AppNotificationModel notification) async {
+    if (notification.isUnread) {
+      await NotificationRepository.markAsRead(notification.id);
+      await _load();
+    }
+    widget.onOpenLeads();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Notificaciones',
+      offset: const Offset(0, 12),
+      constraints: const BoxConstraints(minWidth: 360, maxWidth: 390),
+      onOpened: _load,
+      onSelected: (value) async {
+        if (value == 'mark_all') {
+          await _markAllAsRead();
+          return;
+        }
+        AppNotificationModel? notification;
+        for (final item in notifications) {
+          if (item.id == value) {
+            notification = item;
+            break;
+          }
+        }
+        if (notification != null) await _openNotification(notification);
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: _NotificationsHeader(
+            unreadCount: unreadCount,
+            onMarkAllRead: unreadCount == 0
+                ? null
+                : () {
+                    Navigator.of(context).pop('mark_all');
+                  },
+          ),
+        ),
+        if (loading)
+          const PopupMenuItem<String>(
+            enabled: false,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )
+        else if (notifications.isEmpty)
+          const PopupMenuItem<String>(
+            enabled: false,
+            child: _EmptyNotifications(),
+          )
+        else
+          ...notifications.map(
+            (notification) => PopupMenuItem<String>(
+              value: notification.id,
+              child: _NotificationTile(notification: notification),
+            ),
+          ),
+      ],
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: TaploeColors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: TaploeColors.borderStrong),
+              ),
+              child: const Icon(
+                Icons.notifications_none_rounded,
+                color: TaploeColors.black,
+                size: 22,
+              ),
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: TaploeColors.error,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: TaploeColors.white, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    unreadCount > 9 ? '9+' : '$unreadCount',
+                    style: GoogleFonts.dmSans(
+                      color: TaploeColors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationsHeader extends StatelessWidget {
+  final int unreadCount;
+  final VoidCallback? onMarkAllRead;
+
+  const _NotificationsHeader({
+    required this.unreadCount,
+    required this.onMarkAllRead,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 340,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Notificaciones',
+                  style: GoogleFonts.outfit(
+                    color: context.text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  unreadCount == 0
+                      ? 'Todo está leído'
+                      : '$unreadCount sin leer',
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onMarkAllRead,
+            child: const Text('Marcar leídas'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationTile extends StatelessWidget {
+  final AppNotificationModel notification;
+
+  const _NotificationTile({required this.notification});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 340,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: Icon(
+              _notificationIcon(notification.notificationType),
+              color: TaploeColors.blue,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        notification.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: context.text,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    if (notification.isUnread)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: TaploeColors.error,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  notification.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _relativeTime(notification.createdAt),
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyNotifications extends StatelessWidget {
+  const _EmptyNotifications();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 340,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.notifications_none_rounded,
+              color: TaploeColors.blue,
+              size: 30,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Sin notificaciones recientes',
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Cuando lleguen nuevos leads aparecerán aquí.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+IconData _notificationIcon(String type) {
+  return switch (type) {
+    'lead_created' => Icons.person_add_alt_1_rounded,
+    'form_submit' => Icons.dynamic_form_rounded,
+    'profile_view' => Icons.visibility_outlined,
+    _ => Icons.notifications_none_rounded,
+  };
 }
 
 class _Sidebar extends StatelessWidget {
@@ -2147,7 +2489,9 @@ class TaploeAssetIcon extends StatelessWidget {
 }
 
 class HomeOverviewView extends StatefulWidget {
-  const HomeOverviewView({super.key});
+  final ValueChanged<DashboardSection> onSelected;
+
+  const HomeOverviewView({super.key, required this.onSelected});
 
   @override
   State<HomeOverviewView> createState() => _HomeOverviewViewState();
@@ -2195,7 +2539,6 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
       AnalyticsRepository.fetchSummary(p.id),
       LeadRepository.fetchForProfile(p.id),
       SmartFormRepository.fetchActiveForms(p.id),
-      CardRepository.fetchAccessPointsForProfile(p.id),
       AnalyticsRepository.fetchRecentEvents(p.id),
     ]);
 
@@ -2206,8 +2549,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
           summary: results[0] as AnalyticsSummaryModel,
           leads: results[1] as List<LeadModel>,
           forms: results[2] as List<SmartFormModel>,
-          accessPoints: results[3] as List<ProfileAccessPointModel>,
-          events: results[4] as List<AnalyticsEventModel>,
+          events: results[3] as List<AnalyticsEventModel>,
         );
         loading = false;
       });
@@ -2231,64 +2573,50 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
         : ((s.linkClicks / s.profileViews) * 100).round();
     return PageShell(
       title: 'Hola, ${user?.fullName.split(' ').first ?? 'Taploe'}',
-      subtitle:
-          'Controla tus perfiles, tarjetas, accesos QR/NFC y resultados desde un solo panel.',
+      subtitle: 'Aquí tienes un resumen de tu actividad y rendimiento.',
       child: loading
           ? const Center(child: CircularProgressIndicator())
+          : p == null
+          ? const TaploeEmpty(
+              title: 'Sin perfil seleccionado',
+              message: 'Crea o selecciona un perfil para empezar.',
+            )
           : Column(
               children: [
-                if (p == null)
-                  const TaploeEmpty(
-                    title: 'Sin perfil seleccionado',
-                    message: 'Crea o selecciona un perfil para empezar.',
-                  )
-                else
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth > 820;
-                      final metricCards = [
-                        _MetricPanel(
-                          label: 'Vistas',
-                          value: '${s?.profileViews ?? 0}',
-                          icon: Icons.visibility_outlined,
-                        ),
-                        _MetricPanel(
-                          label: 'NFC',
-                          value: '${s?.nfcViews ?? 0}',
-                          icon: Icons.nfc_rounded,
-                        ),
-                        _MetricPanel(
-                          label: 'QR',
-                          value: '${s?.qrViews ?? 0}',
-                          icon: Icons.qr_code_rounded,
-                        ),
-                        _MetricPanel(
-                          label: 'Clicks',
-                          value: '${s?.linkClicks ?? 0}',
-                          icon: Icons.ads_click_rounded,
-                        ),
-                        _MetricPanel(
-                          label: 'Leads',
-                          value: '${d?.leads.length ?? 0}',
-                          icon: Icons.handshake_outlined,
-                        ),
-                        _MetricPanel(
-                          label: 'Tarjetas',
-                          value: '${profileCards.length}',
-                          icon: Icons.credit_card_rounded,
-                        ),
-                      ];
-                      return GridView.count(
-                        crossAxisCount: wide ? 6 : 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        childAspectRatio: wide ? 1.12 : 1.15,
-                        children: metricCards,
-                      );
-                    },
-                  ),
+                _HomeMetricsBar(
+                  metrics: [
+                    _HomeMetricData(
+                      label: 'Vistas',
+                      value: '${s?.profileViews ?? 0}',
+                      icon: Icons.visibility_outlined,
+                    ),
+                    _HomeMetricData(
+                      label: 'NFC',
+                      value: '${s?.nfcViews ?? 0}',
+                      icon: Icons.nfc_rounded,
+                    ),
+                    _HomeMetricData(
+                      label: 'QR',
+                      value: '${s?.qrViews ?? 0}',
+                      icon: Icons.qr_code_rounded,
+                    ),
+                    _HomeMetricData(
+                      label: 'Clicks',
+                      value: '${s?.linkClicks ?? 0}',
+                      icon: Icons.ads_click_rounded,
+                    ),
+                    _HomeMetricData(
+                      label: 'Leads',
+                      value: '${d?.leads.length ?? 0}',
+                      icon: Icons.link_rounded,
+                    ),
+                    _HomeMetricData(
+                      label: 'Tarjetas',
+                      value: '${profileCards.length}',
+                      icon: Icons.credit_card_rounded,
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 _ResponsivePair(
                   breakpoint: 980,
@@ -2303,6 +2631,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                             _PanelHeader(
                               title: 'Rendimiento reciente',
                               icon: Icons.show_chart_rounded,
+                              trailing: 'Últimos 7 días',
                             ),
                             const SizedBox(height: 16),
                             SizedBox(
@@ -2335,6 +2664,17 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      _QuickActionsPanel(
+                        onShare: () =>
+                            widget.onSelected(DashboardSection.share),
+                        onProfile: () =>
+                            widget.onSelected(DashboardSection.profile),
+                        onCards: () =>
+                            widget.onSelected(DashboardSection.cards),
+                        onAnalytics: () =>
+                            widget.onSelected(DashboardSection.analytics),
+                      ),
+                      const SizedBox(height: 16),
                       TaploePanel(
                         child: Row(
                           children: [
@@ -2351,12 +2691,12 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    p == null
-                                        ? '-'
-                                        : TaploeConfig.profileUrl(p.publicSlug),
+                                    TaploeConfig.profileUrl(p.publicSlug),
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.dmSans(
-                                      color: context.muted,
+                                      color: TaploeColors.blue,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ],
@@ -2366,18 +2706,14 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                               width: 120,
                               label: 'Copiar',
                               kind: TaploeButtonKind.secondary,
-                              onPressed: p == null
-                                  ? null
-                                  : () {
-                                      Clipboard.setData(
-                                        ClipboardData(
-                                          text: TaploeConfig.profileUrl(
-                                            p.publicSlug,
-                                          ),
-                                        ),
-                                      );
-                                      taploeToast(context, 'Enlace copiado.');
-                                    },
+                              onPressed: () {
+                                Clipboard.setData(
+                                  ClipboardData(
+                                    text: TaploeConfig.profileUrl(p.publicSlug),
+                                  ),
+                                );
+                                taploeToast(context, 'Enlace copiado.');
+                              },
                             ),
                           ],
                         ),
@@ -2409,16 +2745,16 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                             _CheckRow(
                               label: 'Datos de contacto',
                               done:
-                                  p?.vcard?.email?.isNotEmpty == true ||
-                                  p?.vcard?.mobilePhone?.isNotEmpty == true,
+                                  p.vcard?.email?.isNotEmpty == true ||
+                                  p.vcard?.mobilePhone?.isNotEmpty == true,
                             ),
                             _CheckRow(
                               label: 'Enlace público listo',
-                              done: p?.publicSlug.isNotEmpty == true,
+                              done: p.publicSlug.isNotEmpty,
                             ),
                             _CheckRow(
                               label: 'Enlaces visibles',
-                              done: (p?.links.length ?? 0) > 0,
+                              done: p.links.isNotEmpty,
                             ),
                             _CheckRow(
                               label: 'Tarjeta conectada',
@@ -2437,65 +2773,17 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                               icon: Icons.bolt_outlined,
                             ),
                             const SizedBox(height: 10),
-                            if (d?.events.isEmpty ?? true)
-                              const _MutedText('Sin actividad todavía.')
-                            else
-                              ...d!.events.take(5).map(_ActivityTile.new),
+                            _HomeActivityPanel(
+                              events: d?.events ?? const [],
+                              onAnalytics: () =>
+                                  widget.onSelected(DashboardSection.analytics),
+                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      _ProPromptPanel(),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _ResponsivePair(
-                  breakpoint: 900,
-                  left: TaploePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _PanelHeader(
-                          title: 'Links más usados',
-                          icon: Icons.link_rounded,
-                        ),
-                        const SizedBox(height: 12),
-                        if (s?.clicksByLabel.isEmpty ?? true)
-                          const _MutedText('Aún no hay clicks en enlaces.')
-                        else
-                          ...s!.clicksByLabel.entries
-                              .take(5)
-                              .map(
-                                (entry) => _RankRow(
-                                  label: entry.key,
-                                  value: entry.value,
-                                  max: s.clicksByLabel.values.fold<int>(
-                                    1,
-                                    (a, b) => b > a ? b : a,
-                                  ),
-                                ),
-                              ),
-                      ],
-                    ),
-                  ),
-                  right: TaploePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _PanelHeader(
-                          title: 'Accesos activos',
-                          icon: Icons.qr_code_2_rounded,
-                        ),
-                        const SizedBox(height: 12),
-                        if (d?.accessPoints.isEmpty ?? true)
-                          const _MutedText(
-                            'Todavía no hay QR/NFC conectados a este perfil.',
-                          )
-                        else
-                          ...d!.accessPoints
-                              .take(4)
-                              .map((ap) => _AccessPointRow(accessPoint: ap)),
-                      ],
-                    ),
                   ),
                 ),
               ],
@@ -2508,16 +2796,400 @@ class _HomeOverviewData {
   final AnalyticsSummaryModel summary;
   final List<LeadModel> leads;
   final List<SmartFormModel> forms;
-  final List<ProfileAccessPointModel> accessPoints;
   final List<AnalyticsEventModel> events;
 
   const _HomeOverviewData({
     required this.summary,
     required this.leads,
     required this.forms,
-    required this.accessPoints,
     required this.events,
   });
+}
+
+class _HomeMetricData {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _HomeMetricData({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+}
+
+class _HomeMetricsBar extends StatelessWidget {
+  final List<_HomeMetricData> metrics;
+
+  const _HomeMetricsBar({required this.metrics});
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 760) {
+            return Wrap(
+              spacing: 18,
+              runSpacing: 20,
+              children: metrics
+                  .map(
+                    (metric) => SizedBox(
+                      width: (constraints.maxWidth - 18) / 2,
+                      child: _HomeMetricItem(metric: metric),
+                    ),
+                  )
+                  .toList(),
+            );
+          }
+          return Row(
+            children: [
+              for (var i = 0; i < metrics.length; i++) ...[
+                Expanded(child: _HomeMetricItem(metric: metrics[i])),
+                if (i != metrics.length - 1)
+                  Container(
+                    width: 1,
+                    height: 54,
+                    margin: const EdgeInsets.symmetric(horizontal: 18),
+                    color: TaploeColors.border,
+                  ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HomeMetricItem extends StatelessWidget {
+  final _HomeMetricData metric;
+
+  const _HomeMetricItem({required this.metric});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(metric.icon, color: TaploeColors.blue, size: 30),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                metric.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  metric.value,
+                  style: GoogleFonts.outfit(
+                    color: context.text,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickActionsPanel extends StatelessWidget {
+  final VoidCallback onShare;
+  final VoidCallback onProfile;
+  final VoidCallback onCards;
+  final VoidCallback onAnalytics;
+
+  const _QuickActionsPanel({
+    required this.onShare,
+    required this.onProfile,
+    required this.onCards,
+    required this.onAnalytics,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = [
+      _QuickActionData(
+        title: 'Compartir perfil',
+        subtitle: 'Comparte tu enlace público',
+        icon: Icons.link_rounded,
+        onTap: onShare,
+      ),
+      _QuickActionData(
+        title: 'Ver mi perfil',
+        subtitle: 'Revisa cómo ven tu perfil los demás',
+        icon: Icons.badge_outlined,
+        onTap: onProfile,
+      ),
+      _QuickActionData(
+        title: 'Gestionar tarjetas',
+        subtitle: 'Administra tus tarjetas NFC y QR',
+        icon: Icons.credit_card_rounded,
+        onTap: onCards,
+      ),
+      _QuickActionData(
+        title: 'Ver analítica',
+        subtitle: 'Mira el rendimiento detallado',
+        icon: Icons.bar_chart_rounded,
+        onTap: onAnalytics,
+      ),
+    ];
+
+    return TaploePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Acciones rápidas',
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: context.text,
+            ),
+          ),
+          const SizedBox(height: 22),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 760) {
+                return Wrap(
+                  spacing: 18,
+                  runSpacing: 18,
+                  children: actions
+                      .map(
+                        (action) => SizedBox(
+                          width: (constraints.maxWidth - 18) / 2,
+                          child: _QuickActionItem(action: action),
+                        ),
+                      )
+                      .toList(),
+                );
+              }
+              return Row(
+                children: [
+                  for (var i = 0; i < actions.length; i++) ...[
+                    Expanded(child: _QuickActionItem(action: actions[i])),
+                    if (i != actions.length - 1)
+                      Container(
+                        width: 1,
+                        height: 64,
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        color: TaploeColors.border,
+                      ),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionData {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _QuickActionData({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+}
+
+class _QuickActionItem extends StatelessWidget {
+  final _QuickActionData action;
+
+  const _QuickActionItem({required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: action.onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Icon(action.icon, color: TaploeColors.blue, size: 30),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    action.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      color: context.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    action.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontWeight: FontWeight.w700,
+                      height: 1.18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeActivityPanel extends StatelessWidget {
+  final List<AnalyticsEventModel> events;
+  final VoidCallback onAnalytics;
+
+  const _HomeActivityPanel({required this.events, required this.onAnalytics});
+
+  @override
+  Widget build(BuildContext context) {
+    if (events.isNotEmpty) {
+      return Column(children: events.take(5).map(_ActivityTile.new).toList());
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.bolt_rounded, color: TaploeColors.blue, size: 34),
+            const SizedBox(height: 14),
+            Text(
+              'Sin actividad reciente.',
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Cuando tengas actividad, aparecerá aquí.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TaploeButton(
+              width: 170,
+              label: 'Ver analítica',
+              icon: Icons.bar_chart_rounded,
+              kind: TaploeButtonKind.secondary,
+              onPressed: onAnalytics,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProPromptPanel extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Necesitas más?',
+                style: GoogleFonts.outfit(
+                  color: context.text,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Descubre todas las funciones Pro para potenciar tu perfil.',
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          );
+          final button = TaploeButton(
+            width: 168,
+            label: 'Explorar planes',
+            icon: Icons.arrow_forward_rounded,
+            kind: TaploeButtonKind.secondary,
+            onPressed: () {},
+          );
+
+          if (constraints.maxWidth < 420) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.diamond_outlined,
+                  color: TaploeColors.blue,
+                  size: 32,
+                ),
+                const SizedBox(height: 12),
+                textContent,
+                const SizedBox(height: 18),
+                button,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              const Icon(
+                Icons.diamond_outlined,
+                color: TaploeColors.blue,
+                size: 32,
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: textContent),
+              const SizedBox(width: 14),
+              button,
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 int _profileCompletion(DigitalProfileModel? profile) {
@@ -2728,7 +3400,7 @@ class _ActivityTile extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _eventLabel(event.eventType),
+              _activityEventLabel(event),
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.w800,
                 color: context.text,
@@ -2743,6 +3415,20 @@ class _ActivityTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _activityEventLabel(AnalyticsEventModel event) {
+  final metadataLabel = event.metadata['label']?.toString().trim();
+  final linkLabel = event.linkLabel?.trim();
+  final label = metadataLabel?.isNotEmpty == true ? metadataLabel : linkLabel;
+  final type = event.metadata['type']?.toString().trim();
+  return switch (event.eventType) {
+    'link_click' =>
+      'Click en ${label?.isNotEmpty == true ? label : type ?? 'enlace'}',
+    'calendar_click' =>
+      label?.isNotEmpty == true ? 'Click en $label' : 'Click en agenda',
+    _ => _eventLabel(event.eventType),
+  };
 }
 
 class _RankRow extends StatelessWidget {
@@ -2777,55 +3463,6 @@ class _RankRow extends StatelessWidget {
               fontWeight: FontWeight.w900,
               color: context.text,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccessPointRow extends StatelessWidget {
-  final ProfileAccessPointModel accessPoint;
-
-  const _AccessPointRow({required this.accessPoint});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Icon(
-            accessPoint.channel == 'nfc'
-                ? Icons.nfc_rounded
-                : Icons.qr_code_rounded,
-            color: TaploeColors.blue,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  accessPoint.channel.toUpperCase(),
-                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
-                ),
-                Text(
-                  accessPoint.publicUrl,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(color: context.muted),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Copiar',
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: accessPoint.publicUrl));
-              taploeToast(context, 'Acceso copiado.');
-            },
-            icon: const Icon(Icons.copy_rounded),
           ),
         ],
       ),
@@ -3131,6 +3768,32 @@ class _ViewsLineChart extends StatelessWidget {
           ),
         ),
         borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => TaploeColors.white,
+            tooltipBorder: const BorderSide(color: TaploeColors.borderStrong),
+            tooltipRoundedRadius: 10,
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            tooltipMargin: 10,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            getTooltipItems: (spots) => spots
+                .map(
+                  (spot) => LineTooltipItem(
+                    spot.y.toInt().toString(),
+                    GoogleFonts.outfit(
+                      color: TaploeColors.blue,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
         lineBarsData: [
           LineChartBarData(
             isCurved: true,
@@ -3197,6 +3860,424 @@ String _relativeTime(DateTime? date) {
   if (diff.inDays < 1) return '${diff.inHours}h';
   if (diff.inDays < 7) return '${diff.inDays}d';
   return dateShort(date);
+}
+
+String _timeOnly(DateTime? date) {
+  if (date == null) return '--:--';
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _timelineDate(DateTime? date) {
+  if (date == null) return '-';
+  return dateShort(date).replaceAll('.', '');
+}
+
+String _timelineEventLabel(AnalyticsEventModel event) {
+  final metadataLabel = event.metadata['label']?.toString().trim();
+  final linkLabel = event.linkLabel?.trim();
+  final label = metadataLabel?.isNotEmpty == true ? metadataLabel : linkLabel;
+  final type = event.metadata['type']?.toString().trim();
+  return switch (event.eventType) {
+    'profile_view' =>
+      event.accessChannel == 'nfc'
+          ? 'Abrió el perfil desde NFC'
+          : event.accessChannel == 'qr'
+          ? 'Abrió el perfil desde QR'
+          : 'Abrió el perfil digital',
+    'link_click' =>
+      'Hizo click en ${label?.isNotEmpty == true ? label : type ?? 'enlace'}',
+    'calendar_click' => 'Hizo click en agenda',
+    'contact_save' => 'Guardó el contacto',
+    'form_submit' => 'Hizo el llenado de formulario',
+    'lead_created' => 'Registró sus datos',
+    _ => _eventLabel(event.eventType),
+  };
+}
+
+IconData _timelineIcon(AnalyticsEventModel event) {
+  return switch (event.eventType) {
+    'profile_view' => Icons.language_rounded,
+    'link_click' => Icons.ads_click_rounded,
+    'calendar_click' => Icons.calendar_month_rounded,
+    'contact_save' => Icons.person_add_alt_1_rounded,
+    'form_submit' => Icons.assignment_outlined,
+    _ => Icons.circle_outlined,
+  };
+}
+
+String _leadSourceLabel(String? channel) {
+  return switch (channel) {
+    'nfc' => 'Llegó desde tarjeta NFC',
+    'qr' => 'Llegó desde código QR',
+    'wallet' => 'Llegó desde wallet',
+    'manual' => 'Registro manual',
+    'direct' || null || '' => 'Llegó desde enlace público',
+    _ => 'Llegó desde $channel',
+  };
+}
+
+String _shortLeadSourceLabel(String? channel) {
+  return switch (channel) {
+    'nfc' => 'Tarjeta NFC',
+    'qr' => 'Código QR',
+    'wallet' => 'Wallet',
+    'manual' => 'Contacto directo',
+    'direct' || null || '' => 'Sitio web',
+    _ => channel,
+  };
+}
+
+IconData _leadSourceIcon(String? channel) {
+  return switch (channel) {
+    'nfc' => Icons.nfc_rounded,
+    'qr' => Icons.qr_code_rounded,
+    'manual' => Icons.person_outline_rounded,
+    'wallet' => Icons.account_balance_wallet_outlined,
+    _ => Icons.language_rounded,
+  };
+}
+
+String _leadStatusLabel(String status) {
+  return switch (status) {
+    'contacted' => 'Contactado',
+    'new' => 'Nuevo',
+    _ => status,
+  };
+}
+
+Color _leadStatusColor(String status) {
+  return switch (status) {
+    'contacted' => TaploeColors.success,
+    'new' => TaploeColors.blue,
+    _ => TaploeColors.blue,
+  };
+}
+
+String _numericDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day/$month/${date.year}';
+}
+
+String _leadRangeLabel(List<LeadModel> leads) {
+  if (leads.isEmpty) return 'Sin fechas';
+  final dates = leads
+      .map((lead) => lead.lastSeenAt ?? lead.firstSeenAt)
+      .whereType<DateTime>()
+      .toList();
+  if (dates.isEmpty) return 'Sin fechas';
+  dates.sort();
+  return '${_numericDate(dates.first)} - ${_numericDate(dates.last)}';
+}
+
+Future<void> _showSubmissionInfo(
+  BuildContext context,
+  AnalyticsEventModel event,
+) async {
+  final id = event.formSubmissionId;
+  if (id == null) return;
+  final submission = await LeadRepository.fetchSubmissionById(id);
+  if (submission == null) {
+    if (context.mounted) {
+      taploeToast(context, 'No pudimos cargar la información.', error: true);
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => _SubmissionInfoDialog(submission: submission),
+  );
+}
+
+class _SubmissionInfoDialog extends StatelessWidget {
+  final FormSubmissionModel submission;
+
+  const _SubmissionInfoDialog({required this.submission});
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = submission.data.entries
+        .where((entry) => entry.value != null && '${entry.value}'.isNotEmpty)
+        .where((entry) => entry.key != 'form_key')
+        .toList();
+    return Dialog(
+      insetPadding: const EdgeInsets.all(22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.dynamic_form_rounded,
+                    color: TaploeColors.blue,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Información registrada',
+                          style: GoogleFonts.outfit(
+                            color: context.text,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'Formulario enviado ${_relativeTime(submission.submittedAt)}',
+                          style: GoogleFonts.dmSans(
+                            color: context.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              if (entries.isEmpty)
+                const _MutedText('El formulario no contiene datos visibles.')
+              else ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 420),
+                  child: SingleChildScrollView(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final twoColumns = constraints.maxWidth >= 600;
+                        final width = twoColumns
+                            ? (constraints.maxWidth - 12) / 2
+                            : constraints.maxWidth;
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: entries.map((entry) {
+                            final value = '${entry.value}';
+                            final action = _submissionActionForField(
+                              context,
+                              entry.key,
+                              value,
+                            );
+                            return _SubmissionInfoField(
+                              width: width,
+                              icon: _submissionIconForKey(entry.key),
+                              label: _prettySubmissionKey(entry.key),
+                              value: value,
+                              actionIcon: action?.icon,
+                              actionTooltip: action?.tooltip,
+                              onAction: action?.onPressed,
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubmissionFieldAction {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _SubmissionFieldAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+}
+
+Future<void> _openSubmissionUri(BuildContext context, Uri uri) async {
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (context.mounted) {
+      taploeToast(context, 'No se pudo abrir la acción.', error: true);
+    }
+  }
+}
+
+_SubmissionFieldAction? _submissionActionForField(
+  BuildContext context,
+  String key,
+  String value,
+) {
+  final normalized = key.toLowerCase();
+  final cleanValue = value.trim();
+  if (cleanValue.isEmpty) return null;
+  if (normalized.contains('mail') || normalized.contains('correo')) {
+    return _SubmissionFieldAction(
+      icon: Icons.send_rounded,
+      tooltip: 'Enviar correo',
+      onPressed: () =>
+          _openSubmissionUri(context, Uri(scheme: 'mailto', path: cleanValue)),
+    );
+  }
+  if (normalized.contains('phone') ||
+      normalized.contains('tel') ||
+      normalized.contains('whatsapp')) {
+    return _SubmissionFieldAction(
+      icon: Icons.call_rounded,
+      tooltip: 'Llamar',
+      onPressed: () => _openSubmissionUri(
+        context,
+        Uri(scheme: 'tel', path: _cleanPhone(cleanValue)),
+      ),
+    );
+  }
+  return null;
+}
+
+class _SubmissionInfoField extends StatelessWidget {
+  final double width;
+  final IconData icon;
+  final String label;
+  final String value;
+  final IconData? actionIcon;
+  final String? actionTooltip;
+  final VoidCallback? onAction;
+
+  const _SubmissionInfoField({
+    required this.width,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.actionIcon,
+    this.actionTooltip,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: TaploeColors.blue, size: 21),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: GoogleFonts.dmSans(
+                    color: context.text,
+                    fontWeight: FontWeight.w900,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onAction != null && actionIcon != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: actionTooltip,
+              onPressed: onAction,
+              style: IconButton.styleFrom(
+                foregroundColor: TaploeColors.blue,
+                minimumSize: const Size(36, 36),
+                fixedSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+              ),
+              icon: Icon(actionIcon, size: 19),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+IconData _submissionIconForKey(String key) {
+  final normalized = key.toLowerCase();
+  if (normalized.contains('mail') || normalized.contains('correo')) {
+    return Icons.mail_rounded;
+  }
+  if (normalized.contains('phone') ||
+      normalized.contains('tel') ||
+      normalized.contains('whatsapp')) {
+    return Icons.phone_rounded;
+  }
+  if (normalized.contains('company') || normalized.contains('empresa')) {
+    return Icons.business_rounded;
+  }
+  if (normalized.contains('message') || normalized.contains('mensaje')) {
+    return Icons.notes_rounded;
+  }
+  if (normalized.contains('name') || normalized.contains('nombre')) {
+    return Icons.person_rounded;
+  }
+  if (normalized.contains('job') || normalized.contains('cargo')) {
+    return Icons.badge_rounded;
+  }
+  if (normalized.contains('location') || normalized.contains('ubicacion')) {
+    return Icons.location_on_rounded;
+  }
+  return Icons.label_rounded;
+}
+
+String _prettySubmissionKey(String key) {
+  const known = {
+    'name': 'Nombre',
+    'nombre': 'Nombre',
+    'full_name': 'Nombre',
+    'email': 'Email',
+    'correo': 'Correo',
+    'phone': 'Teléfono',
+    'telefono': 'Teléfono',
+    'company': 'Empresa',
+    'empresa': 'Empresa',
+    'message': 'Mensaje',
+    'mensaje': 'Mensaje',
+  };
+  final mapped = known[key];
+  if (mapped != null) return mapped;
+  return key
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }
 
 class _MetricPanel extends StatelessWidget {
@@ -3490,6 +4571,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
   String? _extrasProfileId;
   List<SmartFormModel> _forms = [];
   List<ProfileIntegrationModel> _integrations = [];
+  bool _hydratingControllers = false;
 
   static int _clampStep(int value) {
     if (value < 0) return 0;
@@ -3502,6 +4584,9 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
     super.initState();
     step = _clampStep(widget.initialStep);
     _fill();
+    for (final controller in _previewControllers) {
+      controller.addListener(_handlePreviewInputChanged);
+    }
     taploeState.addListener(_fill);
   }
 
@@ -3516,6 +4601,9 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
   @override
   void dispose() {
     taploeState.removeListener(_fill);
+    for (final controller in _previewControllers) {
+      controller.removeListener(_handlePreviewInputChanged);
+    }
     for (final c in [
       displayName,
       jobTitle,
@@ -3542,10 +4630,38 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
     super.dispose();
   }
 
+  List<TextEditingController> get _previewControllers => [
+    displayName,
+    jobTitle,
+    company,
+    bio,
+    slug,
+    profilePhoto,
+    logo,
+    cover,
+    email,
+    phone,
+    whatsapp,
+    website,
+    address1,
+    address2,
+    city,
+    region,
+    postalCode,
+    country,
+    note,
+  ];
+
+  void _handlePreviewInputChanged() {
+    if (_hydratingControllers || !mounted) return;
+    setState(() {});
+  }
+
   void _fill() {
     final p = taploeState.activeProfile;
     if (p == null) return;
     if (_loadedProfileId != p.id) {
+      _hydratingControllers = true;
       _loadedProfileId = p.id;
       _extrasProfileId = null;
       _forms = [];
@@ -3569,6 +4685,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
       postalCode.text = p.vcard?.postalCode ?? '';
       country.text = p.vcard?.country ?? '';
       note.text = p.vcard?.note ?? '';
+      _hydratingControllers = false;
       _loadProfileExtras(p.id);
     }
     if (mounted) setState(() {});
@@ -3600,12 +4717,27 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
     if (p == null) return;
     setState(() => saving = true);
     try {
+      final cleanSlug = slugify(slug.text);
+      final slugIsTaken = await ProfileRepository.slugExists(
+        cleanSlug,
+        excludeProfileId: p.id,
+      );
+      if (slugIsTaken) {
+        if (mounted) {
+          taploeToast(
+            context,
+            'Ese slug publico ya esta en uso. Elige otro.',
+            error: true,
+          );
+        }
+        return;
+      }
       final updated = p.copyWith(
         displayName: displayName.text.trim(),
         jobTitle: jobTitle.text.trim(),
         companyName: company.text.trim(),
         bio: bio.text.trim(),
-        publicSlug: slugify(slug.text),
+        publicSlug: cleanSlug,
         profilePhotoUrl: profilePhoto.text.trim().isEmpty
             ? null
             : profilePhoto.text.trim(),
@@ -3654,33 +4786,63 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
   ) async {
     final p = taploeState.activeProfile;
     final user = taploeState.currentUser;
-    if (p == null || user == null) return;
+    final authUserId = taploeState.client.auth.currentUser?.id;
+    if (p == null || user == null || authUserId == null) return;
 
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
+      type: FileType.custom,
+      allowedExtensions: _profileAssetAllowedExtensions,
       withData: true,
       allowMultiple: false,
     );
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (file == null || bytes == null) return;
+    if (!_isAllowedProfileAsset(file.name)) {
+      if (mounted) {
+        taploeToast(
+          context,
+          'Solo puedes cargar imágenes JPG, PNG, WEBP, HEIC, HEIF o SVG.',
+          error: true,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    Uint8List editorBytes;
+    try {
+      editorBytes = _isSvgProfileAsset(file.name)
+          ? await _rasterizeSvgToPng(context, bytes, kind: kind)
+          : bytes;
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(
+          context,
+          'No pudimos convertir el SVG a imagen. Revisa el archivo.',
+          error: true,
+        );
+      }
+      return;
+    }
     if (!mounted) return;
 
     final editedBytes = await _showProfileAssetEditor(
       context,
       kind: kind,
-      bytes: bytes,
+      bytes: editorBytes,
     );
     if (editedBytes == null) return;
 
     setState(() => uploadingAsset = kind);
     try {
       final url = await ProfileAssetRepository.uploadProfileAsset(
-        userId: user.id,
+        authUserId: authUserId,
         profileId: p.id,
         kind: kind,
         bytes: editedBytes,
-        fileName: '$kind.png',
+        fileName: '$kind.jpg',
       );
       controller.text = url;
       await save();
@@ -3697,6 +4859,78 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
     } finally {
       if (mounted) setState(() => uploadingAsset = null);
     }
+  }
+
+  DigitalProfileModel _previewProfile(DigitalProfileModel profile) {
+    final links =
+        profile.links.map((link) => _previewLinkWithCurrentValue(link)).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return profile.copyWith(
+      displayName: displayName.text.trim().isEmpty
+          ? profile.displayName
+          : displayName.text.trim(),
+      jobTitle: jobTitle.text.trim(),
+      companyName: company.text.trim(),
+      bio: bio.text.trim(),
+      publicSlug: slugify(slug.text),
+      profilePhotoUrl: profilePhoto.text.trim().isEmpty
+          ? profile.profilePhotoUrl
+          : profilePhoto.text.trim(),
+      logoUrl: logo.text.trim().isEmpty ? profile.logoUrl : logo.text.trim(),
+      coverPhotoUrl: cover.text.trim().isEmpty
+          ? profile.coverPhotoUrl
+          : cover.text.trim(),
+      vcard: ProfileVcardModel(
+        id: profile.vcard?.id,
+        profileId: profile.id,
+        firstName: displayName.text.trim(),
+        organization: company.text.trim(),
+        title: jobTitle.text.trim(),
+        email: email.text.trim(),
+        mobilePhone: phone.text.trim(),
+        whatsappPhone: whatsapp.text.trim(),
+        websiteUrl: website.text.trim(),
+        addressLine1: address1.text.trim(),
+        addressLine2: address2.text.trim(),
+        city: city.text.trim(),
+        state: region.text.trim(),
+        postalCode: postalCode.text.trim(),
+        country: country.text.trim(),
+        note: note.text.trim(),
+      ),
+      links: links,
+    );
+  }
+
+  ProfileLinkModel _previewLinkWithCurrentValue(ProfileLinkModel link) {
+    final value = switch (link.linkType) {
+      'email' => email.text.trim(),
+      'phone' => phone.text.trim(),
+      'whatsapp' => whatsapp.text.trim(),
+      'website' => website.text.trim(),
+      'maps' => [
+        address1.text,
+        city.text,
+        region.text,
+        country.text,
+      ].where((part) => part.trim().isNotEmpty).join(', '),
+      _ => null,
+    };
+    if (value == null || value.isEmpty) return link;
+    return ProfileLinkModel(
+      id: link.id,
+      profileId: link.profileId,
+      linkType: link.linkType,
+      label: link.label,
+      value: value,
+      url: _linkUrlFor(link.linkType, value),
+      iconKey: link.iconKey,
+      isVisible: link.isVisible,
+      isFeatured: link.isFeatured,
+      sortOrder: link.sortOrder,
+      openMode: link.openMode,
+      metadata: link.metadata,
+    );
   }
 
   @override
@@ -3733,7 +4967,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
         ),
         TaploeButton(
           label: 'Guardar cambios',
-          width: 170,
+          width: 190,
           loading: saving,
           onPressed: save,
         ),
@@ -3824,31 +5058,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
                     ),
                     const SizedBox(height: 16),
                     _DigitalProfilePhonePreview(
-                      profile: p.copyWith(
-                        displayName: displayName.text.trim().isEmpty
-                            ? p.displayName
-                            : displayName.text.trim(),
-                        jobTitle: jobTitle.text.trim(),
-                        companyName: company.text.trim(),
-                        bio: bio.text.trim(),
-                        publicSlug: slugify(slug.text),
-                        profilePhotoUrl: profilePhoto.text.trim().isEmpty
-                            ? p.profilePhotoUrl
-                            : profilePhoto.text.trim(),
-                        logoUrl: logo.text.trim().isEmpty
-                            ? p.logoUrl
-                            : logo.text.trim(),
-                        coverPhotoUrl: cover.text.trim().isEmpty
-                            ? p.coverPhotoUrl
-                            : cover.text.trim(),
-                        vcard: ProfileVcardModel(
-                          profileId: p.id,
-                          email: email.text.trim(),
-                          mobilePhone: phone.text.trim(),
-                          whatsappPhone: whatsapp.text.trim(),
-                          websiteUrl: website.text.trim(),
-                        ),
-                      ),
+                      profile: _previewProfile(p),
                       forms: _forms,
                       integrations: _integrations,
                     ),
@@ -4073,24 +5283,6 @@ class _ProfileStepPanel extends StatelessWidget {
               controller: slug,
               hint: 'daniel-nuno',
               onSubmitted: (_) => save(),
-            ),
-            const SizedBox(height: 14),
-            _ProfileAssetPicker(
-              label: 'Logo',
-              value: logo.text,
-              icon: Icons.workspace_premium_outlined,
-              loading: uploadingAsset == 'logo',
-              onTap: onUploadLogo,
-              fallback: const TaploeLogo(size: 24),
-            ),
-            const SizedBox(height: 14),
-            _ProfileAssetPicker(
-              label: 'Portada',
-              value: cover.text,
-              icon: Icons.image_outlined,
-              loading: uploadingAsset == 'cover',
-              onTap: onUploadCover,
-              wide: true,
             ),
           ],
           if (step == 1) ...[
@@ -4438,7 +5630,16 @@ class _ProfileStepPanel extends StatelessWidget {
               ),
             ),
           ],
-          if (step == 3) ...[_DesignStudio(profile: profile)],
+          if (step == 3) ...[
+            _DesignStudio(
+              profile: profile,
+              logo: logo,
+              cover: cover,
+              uploadingAsset: uploadingAsset,
+              onUploadLogo: onUploadLogo,
+              onUploadCover: onUploadCover,
+            ),
+          ],
           if (step == 4) ...[
             _CaptureFormsSection(
               forms: forms,
@@ -4890,8 +6091,20 @@ class _LinkGlyph extends StatelessWidget {
 
 class _DesignStudio extends StatelessWidget {
   final DigitalProfileModel profile;
+  final TextEditingController logo;
+  final TextEditingController cover;
+  final String? uploadingAsset;
+  final VoidCallback onUploadLogo;
+  final VoidCallback onUploadCover;
 
-  const _DesignStudio({required this.profile});
+  const _DesignStudio({
+    required this.profile,
+    required this.logo,
+    required this.cover,
+    required this.uploadingAsset,
+    required this.onUploadLogo,
+    required this.onUploadCover,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -4933,6 +6146,30 @@ class _DesignStudio extends StatelessWidget {
           'Elige un estilo profesional y personaliza tu perfil en segundos.',
           style: GoogleFonts.dmSans(color: context.muted),
         ),
+        const SizedBox(height: 18),
+        const _DesignSectionTitle('Identidad visual'),
+        const SizedBox(height: 14),
+        _ResponsivePair(
+          left: _ProfileAssetPicker(
+            label: 'Logo',
+            value: logo.text,
+            icon: Icons.workspace_premium_outlined,
+            loading: uploadingAsset == 'logo',
+            onTap: onUploadLogo,
+            fallback: const TaploeLogo(size: 24),
+            wide: true,
+          ),
+          right: _ProfileAssetPicker(
+            label: 'Portada',
+            value: cover.text,
+            icon: Icons.image_outlined,
+            loading: uploadingAsset == 'cover',
+            onTap: onUploadCover,
+            wide: true,
+          ),
+        ),
+        const SizedBox(height: 22),
+        const _DesignSectionTitle('Estilos rápidos'),
         const SizedBox(height: 16),
         GridView.builder(
           shrinkWrap: true,
@@ -5016,7 +6253,7 @@ class _DesignStudio extends StatelessWidget {
                 _saveThemeQuick(profile, theme.copyWithBackgroundMode(value)),
           ),
           right: _ColorSwatches(
-            title: 'Fondo personalizado',
+            title: 'Fondo y portada sin imagen',
             selected: theme.backgroundColorStart,
             colors: const [
               '#FFFFFF',
@@ -6444,7 +7681,7 @@ class _ProfilePhotoHeroPicker extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         TaploeButton(
-          width: 230,
+          width: 280,
           label: hasValue ? 'Cambiar foto de perfil' : 'Cargar foto de perfil',
           icon: Icons.photo_camera_outlined,
           kind: TaploeButtonKind.secondary,
@@ -6560,6 +7797,57 @@ Future<Uint8List?> _showProfileAssetEditor(
   );
 }
 
+const _profileAssetAllowedExtensions = [
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'heic',
+  'heif',
+  'svg',
+];
+
+bool _isAllowedProfileAsset(String fileName) {
+  final extension = fileName.split('?').first.split('.').last.toLowerCase();
+  return _profileAssetAllowedExtensions.contains(extension);
+}
+
+bool _isSvgProfileAsset(String fileName) =>
+    fileName.split('?').first.split('.').last.toLowerCase() == 'svg';
+
+Future<Uint8List> _rasterizeSvgToPng(
+  BuildContext context,
+  Uint8List bytes, {
+  required String kind,
+}) async {
+  final pictureInfo = await vg.loadPicture(SvgBytesLoader(bytes), context);
+  try {
+    final size = pictureInfo.size;
+    final aspect = size.width > 0 && size.height > 0
+        ? size.width / size.height
+        : switch (kind) {
+            'logo' => 2.7,
+            'profile-photo' => 1.0,
+            _ => 16 / 9,
+          };
+    final width = 1600;
+    final height = (width / aspect).round().clamp(1, 1600);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawColor(Colors.white, BlendMode.src);
+    final scale = size.width > 0 ? width / size.width : 1.0;
+    canvas.scale(scale);
+    canvas.drawPicture(pictureInfo.picture);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) throw StateError('No se pudo convertir el SVG.');
+    return data.buffer.asUint8List();
+  } finally {
+    pictureInfo.picture.dispose();
+  }
+}
+
 class _ProfileAssetEditorDialog extends StatefulWidget {
   final String kind;
   final Uint8List bytes;
@@ -6602,7 +7890,7 @@ class _ProfileAssetEditorDialogState extends State<_ProfileAssetEditorDialog> {
   Future<void> confirm() async {
     setState(() => processing = true);
     try {
-      final cropped = await _cropImageToPng(
+      final cropped = await _cropImageToJpg(
         widget.bytes,
         width: outputWidth,
         height: outputHeight,
@@ -6613,7 +7901,11 @@ class _ProfileAssetEditorDialogState extends State<_ProfileAssetEditorDialog> {
     } catch (error) {
       safePrintError(error);
       if (mounted) {
-        taploeToast(context, 'No pudimos preparar la imagen.', error: true);
+        taploeToast(
+          context,
+          'No pudimos preparar la imagen. Si es HEIC, intenta desde Safari/iOS o usa JPG.',
+          error: true,
+        );
       }
     } finally {
       if (mounted) setState(() => processing = false);
@@ -6633,9 +7925,10 @@ class _ProfileAssetEditorDialogState extends State<_ProfileAssetEditorDialog> {
           ),
           child: Transform.scale(
             scale: zoom,
+            alignment: alignment,
             child: Image.memory(
               widget.bytes,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               alignment: alignment,
               filterQuality: FilterQuality.high,
             ),
@@ -6751,7 +8044,7 @@ class _AlignmentChip extends StatelessWidget {
   }
 }
 
-Future<Uint8List> _cropImageToPng(
+Future<Uint8List> _cropImageToJpg(
   Uint8List bytes, {
   required int width,
   required int height,
@@ -6765,33 +8058,37 @@ Future<Uint8List> _cropImageToPng(
   final imageHeight = image.height.toDouble();
   final targetAspect = width / height;
   final imageAspect = imageWidth / imageHeight;
-
-  var cropWidth = imageWidth;
-  var cropHeight = imageHeight;
-  if (imageAspect > targetAspect) {
-    cropWidth = imageHeight * targetAspect;
-  } else {
-    cropHeight = imageWidth / targetAspect;
-  }
-  cropWidth = (cropWidth / zoom).clamp(1, imageWidth).toDouble();
-  cropHeight = (cropHeight / zoom).clamp(1, imageHeight).toDouble();
-
-  final left = ((alignment.x + 1) / 2) * (imageWidth - cropWidth);
-  final top = ((alignment.y + 1) / 2) * (imageHeight - cropHeight);
+  final baseScale = imageAspect > targetAspect
+      ? width / imageWidth
+      : height / imageHeight;
+  final drawWidth = imageWidth * baseScale * zoom;
+  final drawHeight = imageHeight * baseScale * zoom;
+  final left = ((alignment.x + 1) / 2) * (width - drawWidth);
+  final top = ((alignment.y + 1) / 2) * (height - drawHeight);
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   final paint = Paint()..isAntiAlias = true;
+  canvas.drawColor(Colors.white, BlendMode.src);
   canvas.drawImageRect(
     image,
-    Rect.fromLTWH(left, top, cropWidth, cropHeight),
-    Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    Rect.fromLTWH(0, 0, imageWidth, imageHeight),
+    Rect.fromLTWH(left, top, drawWidth, drawHeight),
     paint,
   );
   final picture = recorder.endRecording();
   final output = await picture.toImage(width, height);
-  final data = await output.toByteData(format: ui.ImageByteFormat.png);
+  final data = await output.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (data == null) throw StateError('No se pudo procesar la imagen.');
-  return data.buffer.asUint8List();
+  final encoded = img.encodeJpg(
+    img.Image.fromBytes(
+      width: width,
+      height: height,
+      bytes: data.buffer,
+      order: img.ChannelOrder.rgba,
+    ),
+    quality: 92,
+  );
+  return Uint8List.fromList(encoded);
 }
 
 class _LinkTypeOption {
@@ -9397,6 +10694,7 @@ class AnalyticsDashboardView extends StatefulWidget {
 
 class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
   AnalyticsSummaryModel? data;
+  List<AnalyticsEventModel> events = const [];
   bool loading = true;
   String? _profileId;
 
@@ -9425,17 +10723,22 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
       if (mounted) {
         setState(() {
           data = null;
+          events = const [];
           loading = false;
         });
       }
       return;
     }
     if (mounted) setState(() => loading = true);
-    final d = await AnalyticsRepository.fetchSummary(p.id);
+    final result = await Future.wait<Object>([
+      AnalyticsRepository.fetchSummary(p.id),
+      AnalyticsRepository.fetchRecentEvents(p.id, limit: 8),
+    ]);
     if (taploeState.activeProfile?.id != p.id) return;
     if (mounted) {
       setState(() {
-        data = d;
+        data = result[0] as AnalyticsSummaryModel;
+        events = result[1] as List<AnalyticsEventModel>;
         loading = false;
       });
     }
@@ -9444,8 +10747,9 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
   @override
   Widget build(BuildContext context) {
     final d = data;
-    final views = d?.profileViews ?? 0;
-    final ctr = views == 0 ? 0 : ((d!.linkClicks / views) * 100).round();
+    final interactions = d == null
+        ? 0
+        : d.profileViews + d.linkClicks + d.contactsSaved + d.formSubmits;
     return PageShell(
       title: 'Analítica',
       subtitle: 'Mide visitas por NFC, QR, link directo, clicks y formularios.',
@@ -9461,130 +10765,611 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                 ),
               ],
             )
-          : Column(
-              children: [
-                GridView.count(
-                  crossAxisCount: context.isWide ? 4 : 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: context.isWide ? 1.45 : 1.1,
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 1040;
+                final main = Column(
                   children: [
-                    _MetricPanel(
-                      label: 'Vistas totales',
-                      value: '${d.profileViews}',
-                      icon: Icons.visibility_outlined,
+                    _AnalyticsHeroCard(total: interactions),
+                    const SizedBox(height: 16),
+                    _AnalyticsMetricStrip(
+                      items: [
+                        _AnalyticsMetricData(
+                          label: 'Visitas',
+                          value: d.profileViews,
+                          icon: Icons.visibility_outlined,
+                        ),
+                        _AnalyticsMetricData(
+                          label: 'Taps NFC',
+                          value: d.nfcViews,
+                          icon: Icons.nfc_rounded,
+                        ),
+                        _AnalyticsMetricData(
+                          label: 'Clicks',
+                          value: d.linkClicks,
+                          icon: Icons.ads_click_rounded,
+                        ),
+                      ],
                     ),
-                    _MetricPanel(
-                      label: 'NFC',
-                      value: '${d.nfcViews}',
-                      icon: Icons.nfc_rounded,
+                    const SizedBox(height: 16),
+                    TaploePanel(
+                      radius: 24,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Visitas por día',
+                                  style: GoogleFonts.outfit(
+                                    color: context.text,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${d.viewsByDay.fold<int>(0, (a, b) => a + b)} en el rango',
+                                style: GoogleFonts.dmSans(
+                                  color: context.muted,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const _AnalyticsDeltaPill(label: '+0.0%'),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            height: 300,
+                            child: _ViewsBarChart(values: d.viewsByDay),
+                          ),
+                        ],
+                      ),
                     ),
-                    _MetricPanel(
-                      label: 'QR',
-                      value: '${d.qrViews}',
-                      icon: Icons.qr_code_rounded,
-                    ),
-                    _MetricPanel(
-                      label: 'Clicks',
-                      value: '${d.linkClicks}',
-                      icon: Icons.ads_click_rounded,
-                    ),
-                    _MetricPanel(
-                      label: 'CTR',
-                      value: '$ctr%',
-                      icon: Icons.trending_up_rounded,
-                    ),
-                    _MetricPanel(
-                      label: 'Leads/form',
-                      value: '${d.formSubmits}',
-                      icon: Icons.dynamic_form_rounded,
+                    const SizedBox(height: 16),
+                    TaploePanel(
+                      radius: 24,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Links más clickeados',
+                                  style: GoogleFonts.outfit(
+                                    color: context.text,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${d.linkClicks} clicks totales',
+                                style: GoogleFonts.dmSans(
+                                  color: context.muted,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          if (d.clicksByLabel.isEmpty)
+                            const _MutedText('Sin clicks todavía.')
+                          else
+                            ...d.clicksByLabel.entries.map(
+                              (e) => _RankRow(
+                                label: e.key,
+                                value: e.value,
+                                max: d.clicksByLabel.values.fold<int>(
+                                  1,
+                                  (a, b) => b > a ? b : a,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                _ResponsivePair(
-                  breakpoint: 960,
-                  leftFlex: 6,
-                  rightFlex: 4,
-                  left: TaploePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _PanelHeader(
-                          title: 'Últimos 7 días',
-                          icon: Icons.timeline_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 260,
-                          child: _ViewsLineChart(values: d.viewsByDay),
-                        ),
-                      ],
-                    ),
-                  ),
-                  right: TaploePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _PanelHeader(
-                          title: 'Canales',
-                          icon: Icons.hub_outlined,
-                        ),
-                        const SizedBox(height: 14),
-                        _RankRow(
-                          label: 'NFC',
-                          value: d.nfcViews,
-                          max: views == 0 ? 1 : views,
-                        ),
-                        _RankRow(
-                          label: 'QR',
-                          value: d.qrViews,
-                          max: views == 0 ? 1 : views,
-                        ),
-                        _RankRow(
-                          label: 'Directo',
-                          value: d.directViews,
-                          max: views == 0 ? 1 : views,
-                        ),
-                        const Divider(height: 24),
-                        _InsightChip(
-                          label: '${d.contactsSaved} contactos guardados',
-                          icon: Icons.person_add_alt_rounded,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TaploePanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _PanelHeader(
-                        title: 'Clicks por enlace',
-                        icon: Icons.link_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      if (d.clicksByLabel.isEmpty)
-                        const _MutedText('Sin clicks todavía.')
-                      else
-                        ...d.clicksByLabel.entries.map(
-                          (e) => _RankRow(
-                            label: e.key,
-                            value: e.value,
-                            max: d.clicksByLabel.values.fold<int>(
-                              1,
-                              (a, b) => b > a ? b : a,
-                            ),
-                          ),
-                        ),
-                    ],
+                );
+                final recent = _AnalyticsRecentPanel(events: events);
+                if (!wide) {
+                  return Column(
+                    children: [main, const SizedBox(height: 16), recent],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 7, child: main),
+                    const SizedBox(width: 18),
+                    Expanded(flex: 3, child: recent),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _AnalyticsHeroCard extends StatelessWidget {
+  final int total;
+
+  const _AnalyticsHeroCard({required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      radius: 24,
+      child: SizedBox(
+        height: 170,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Interacciones totales',
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$total',
+              style: GoogleFonts.outfit(
+                color: context.text,
+                fontSize: 64,
+                fontWeight: FontWeight.w900,
+                height: .9,
+              ),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                const _AnalyticsDeltaPill(label: '+0.0%'),
+                const SizedBox(width: 14),
+                Text(
+                  'vs período anterior',
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsDeltaPill extends StatelessWidget {
+  final String label;
+
+  const _AnalyticsDeltaPill({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: TaploeColors.blue.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.trending_up_rounded,
+            color: TaploeColors.blue,
+            size: 17,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: TaploeColors.blue,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsMetricData {
+  final String label;
+  final int value;
+  final IconData icon;
+
+  const _AnalyticsMetricData({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+}
+
+class _AnalyticsMetricStrip extends StatelessWidget {
+  final List<_AnalyticsMetricData> items;
+
+  const _AnalyticsMetricStrip({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      radius: 24,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final itemWidth = constraints.maxWidth / items.length;
+          return Wrap(
+            children: [
+              for (var i = 0; i < items.length; i++)
+                SizedBox(
+                  width: itemWidth < 220 ? constraints.maxWidth : itemWidth,
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      right: i == items.length - 1 ? 0 : 24,
+                      left: i == 0 ? 0 : 24,
+                    ),
+                    decoration: BoxDecoration(
+                      border: i == items.length - 1 || itemWidth < 220
+                          ? null
+                          : const Border(
+                              right: BorderSide(color: TaploeColors.border),
+                            ),
+                    ),
+                    child: _AnalyticsMetricItem(item: items[i]),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AnalyticsMetricItem extends StatelessWidget {
+  final _AnalyticsMetricData item;
+
+  const _AnalyticsMetricItem({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(item.icon, color: context.muted, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                item.label,
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${item.value}',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: 34,
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            '+0.0%',
+            style: GoogleFonts.dmSans(
+              color: TaploeColors.blue,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsRecentPanel extends StatelessWidget {
+  final List<AnalyticsEventModel> events;
+
+  const _AnalyticsRecentPanel({required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      radius: 24,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Actividad reciente',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Últimas interacciones con tu perfil',
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 24),
+          if (events.isEmpty)
+            const _MutedText('Sin actividad reciente.')
+          else
+            ...events.map((event) => _AnalyticsRecentTile(event: event)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsRecentTile extends StatelessWidget {
+  final AnalyticsEventModel event;
+
+  const _AnalyticsRecentTile({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = _analyticsRecentTitle(event);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: TaploeColors.border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(_analyticsRecentIcon(event), color: TaploeColors.blue, size: 25),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: context.text,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: context.muted,
+                      size: 15,
+                    ),
+                    Text(
+                      _analyticsLocation(event),
+                      style: GoogleFonts.dmSans(
+                        color: context.muted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    _AnalyticsChannelBadge(event: event),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _timeOnly(event.occurredAt),
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsChannelBadge extends StatelessWidget {
+  final AnalyticsEventModel event;
+
+  const _AnalyticsChannelBadge({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = event.accessChannel.toUpperCase();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: TaploeColors.blue.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          color: TaploeColors.blue,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+String _analyticsRecentTitle(AnalyticsEventModel event) {
+  return switch (event.eventType) {
+    'profile_view' =>
+      event.accessChannel == 'nfc'
+          ? 'Escaneo NFC'
+          : event.accessChannel == 'qr'
+          ? 'Escaneo QR'
+          : 'Visita al perfil',
+    'link_click' => _activityEventLabel(event),
+    'calendar_click' => _activityEventLabel(event),
+    'form_submit' => 'Formulario enviado',
+    'contact_save' => 'Contacto guardado',
+    _ => _eventLabel(event.eventType),
+  };
+}
+
+IconData _analyticsRecentIcon(AnalyticsEventModel event) {
+  return switch (event.accessChannel) {
+    'nfc' => Icons.wifi_rounded,
+    'qr' => Icons.qr_code_rounded,
+    _ => _eventIcon(event.eventType),
+  };
+}
+
+String _analyticsLocation(AnalyticsEventModel event) {
+  final city = event.metadata['city']?.toString().trim();
+  final region = event.metadata['region']?.toString().trim();
+  final country = event.metadata['country']?.toString().trim();
+  final parts = [
+    city,
+    region,
+    country,
+  ].where((part) => part != null && part.isNotEmpty).cast<String>().toList();
+  return parts.isEmpty ? 'Desconocido' : parts.join(', ');
+}
+
+class _ViewsBarChart extends StatelessWidget {
+  final List<int> values;
+
+  const _ViewsBarChart({required this.values});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = values.isEmpty ? List<int>.filled(7, 0) : values;
+    final maxY = data.fold<int>(1, (max, value) => value > max ? value : max);
+    const labels = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    return BarChart(
+      BarChartData(
+        minY: 0,
+        maxY: (maxY + 1).toDouble(),
+        alignment: BarChartAlignment.spaceAround,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: TaploeColors.border, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 34,
+              interval: maxY <= 2 ? 1 : 2,
+              getTitlesWidget: (value, meta) {
+                if (value < 0 || value > maxY + 1) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  value.toInt().toString(),
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= labels.length) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  labels[index],
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => TaploeColors.white,
+            tooltipBorder: const BorderSide(color: TaploeColors.borderStrong),
+            tooltipRoundedRadius: 10,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem(
+                rod.toY.toInt().toString(),
+                GoogleFonts.outfit(
+                  color: TaploeColors.blue,
+                  fontWeight: FontWeight.w900,
+                ),
+              );
+            },
+          ),
+        ),
+        barGroups: [
+          for (var i = 0; i < data.length; i++)
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: data[i].toDouble(),
+                  width: 24,
+                  color: TaploeColors.blue,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
+                  backDrawRodData: BackgroundBarChartRodData(
+                    show: true,
+                    toY: (maxY + 1).toDouble(),
+                    color: Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }
@@ -9600,6 +11385,11 @@ class _LeadsViewState extends State<LeadsView> {
   List<LeadModel> leads = [];
   bool loading = true;
   String? _profileId;
+  final _searchController = TextEditingController();
+  String _statusFilter = 'all';
+  String _sourceFilter = 'all';
+  String _sortMode = 'recent';
+  bool _listView = true;
 
   @override
   void initState() {
@@ -9610,6 +11400,7 @@ class _LeadsViewState extends State<LeadsView> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     taploeState.removeListener(_handleTaploeStateChanged);
     super.dispose();
   }
@@ -9647,15 +11438,77 @@ class _LeadsViewState extends State<LeadsView> {
     await load();
   }
 
+  Future<void> deleteLead(LeadModel lead) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar lead'),
+        content: Text(
+          '¿Quieres eliminar a ${lead.displayName}? Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await LeadRepository.deleteLead(lead.id);
+      await load();
+      if (mounted) taploeToast(context, 'Lead eliminado.');
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(context, 'No pudimos eliminar el lead.', error: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final byStatus = <String, int>{
-      for (final status in ['new', 'contacted', 'qualified', 'won', 'lost'])
+      for (final status in ['new', 'contacted'])
         status: leads.where((lead) => lead.status == status).length,
     };
+    final sources =
+        leads
+            .map((lead) => lead.sourceChannel?.trim() ?? '')
+            .where((source) => source.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final query = _searchController.text.trim().toLowerCase();
+    final filteredLeads = leads.where((lead) {
+      final matchesStatus =
+          _statusFilter == 'all' || lead.status == _statusFilter;
+      final matchesSource =
+          _sourceFilter == 'all' || lead.sourceChannel == _sourceFilter;
+      final haystack = [
+        lead.displayName,
+        lead.company,
+        lead.email,
+        lead.phone,
+        _leadSourceLabel(lead.sourceChannel),
+      ].where((value) => value?.isNotEmpty == true).join(' ').toLowerCase();
+      return matchesStatus && matchesSource && haystack.contains(query);
+    }).toList();
+    filteredLeads.sort((a, b) {
+      final aDate = a.lastSeenAt ?? a.firstSeenAt ?? DateTime(0);
+      final bDate = b.lastSeenAt ?? b.firstSeenAt ?? DateTime(0);
+      return _sortMode == 'oldest'
+          ? aDate.compareTo(bDate)
+          : bDate.compareTo(aDate);
+    });
     return PageShell(
-      title: 'Leads',
-      subtitle: 'Contactos generados desde formularios e interacciones.',
+      title: 'Bandeja de leads',
+      subtitle: 'Administra y da seguimiento a todos tus leads.',
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : leads.isEmpty
@@ -9668,156 +11521,1051 @@ class _LeadsViewState extends State<LeadsView> {
                 ),
               ],
             )
-          : Column(
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GridView.count(
-                  crossAxisCount: context.isWide ? 5 : 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: context.isWide ? 1.35 : 1.25,
-                  children: [
-                    _MetricPanel(
-                      label: 'Nuevos',
-                      value: '${byStatus['new']}',
-                      icon: Icons.fiber_new_rounded,
+                if (context.isWide) ...[
+                  SizedBox(
+                    width: 300,
+                    child: Column(
+                      children: [
+                        _LeadsSummaryPanel(
+                          total: leads.length,
+                          newCount: byStatus['new'] ?? 0,
+                          contactedCount: byStatus['contacted'] ?? 0,
+                        ),
+                        const SizedBox(height: 16),
+                        _LeadsFiltersPanel(
+                          statusFilter: _statusFilter,
+                          sourceFilter: _sourceFilter,
+                          sources: sources,
+                          onStatusChanged: (value) =>
+                              setState(() => _statusFilter = value),
+                          onSourceChanged: (value) =>
+                              setState(() => _sourceFilter = value),
+                          onClear: () => setState(() {
+                            _statusFilter = 'all';
+                            _sourceFilter = 'all';
+                            _searchController.clear();
+                          }),
+                        ),
+                      ],
                     ),
-                    _MetricPanel(
-                      label: 'Contactados',
-                      value: '${byStatus['contacted']}',
-                      icon: Icons.mark_email_read_outlined,
-                    ),
-                    _MetricPanel(
-                      label: 'Calificados',
-                      value: '${byStatus['qualified']}',
-                      icon: Icons.verified_outlined,
-                    ),
-                    _MetricPanel(
-                      label: 'Ganados',
-                      value: '${byStatus['won']}',
-                      icon: Icons.emoji_events_outlined,
-                    ),
-                    _MetricPanel(
-                      label: 'Perdidos',
-                      value: '${byStatus['lost']}',
-                      icon: Icons.archive_outlined,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TaploePanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _PanelHeader(
-                        title: 'Bandeja de leads',
-                        icon: Icons.handshake_outlined,
-                        trailing: '${leads.length} total',
-                      ),
-                      const SizedBox(height: 10),
-                      ...leads.map((lead) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(color: TaploeColors.border),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Expanded(
+                  child: TaploePanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _LeadsToolbar(
+                          controller: _searchController,
+                          total: filteredLeads.length,
+                          statusFilter: _statusFilter,
+                          sortMode: _sortMode,
+                          listView: _listView,
+                          onSearchChanged: (_) => setState(() {}),
+                          onStatusChanged: (value) =>
+                              setState(() => _statusFilter = value),
+                          onSortChanged: (value) =>
+                              setState(() => _sortMode = value),
+                          onViewChanged: (value) =>
+                              setState(() => _listView = value),
+                          dateLabel: _leadRangeLabel(filteredLeads),
+                        ),
+                        if (!context.isWide) ...[
+                          const SizedBox(height: 14),
+                          _LeadsFiltersPanel(
+                            statusFilter: _statusFilter,
+                            sourceFilter: _sourceFilter,
+                            sources: sources,
+                            compact: true,
+                            onStatusChanged: (value) =>
+                                setState(() => _statusFilter = value),
+                            onSourceChanged: (value) =>
+                                setState(() => _sourceFilter = value),
+                            onClear: () => setState(() {
+                              _statusFilter = 'all';
+                              _sourceFilter = 'all';
+                              _searchController.clear();
+                            }),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        if (filteredLeads.isEmpty)
+                          const TaploeEmpty(
+                            title: 'Sin resultados',
+                            message:
+                                'Ajusta la búsqueda o los filtros para ver leads.',
+                          )
+                        else
+                          ...filteredLeads.map(
+                            (lead) => _LeadTimelineTile(
+                              lead: lead,
+                              onStatusChanged: (value) => status(lead, value),
+                              onDelete: () => deleteLead(lead),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: TaploeColors.black,
-                                child: Text(
-                                  lead.displayName.isNotEmpty
-                                      ? lead.displayName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      lead.displayName,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      [lead.company, lead.email, lead.phone]
-                                          .where((e) => e?.isNotEmpty == true)
-                                          .join(' · '),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.dmSans(
-                                        color: context.muted,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 7),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 6,
-                                      children: [
-                                        _SmallPill(
-                                          label: 'Score ${lead.score}',
-                                          icon: Icons.local_fire_department,
-                                        ),
-                                        _SmallPill(
-                                          label: lead.sourceChannel ?? 'direct',
-                                          icon: Icons.hub_outlined,
-                                        ),
-                                        _SmallPill(
-                                          label: _relativeTime(lead.lastSeenAt),
-                                          icon: Icons.schedule_rounded,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              DropdownButton<String>(
-                                value: lead.status,
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'new',
-                                    child: Text('Nuevo'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'contacted',
-                                    child: Text('Contactado'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'qualified',
-                                    child: Text('Calificado'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'won',
-                                    child: Text('Ganado'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'lost',
-                                    child: Text('Perdido'),
-                                  ),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) status(lead, v);
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _LeadsSummaryPanel extends StatelessWidget {
+  final int total;
+  final int newCount;
+  final int contactedCount;
+
+  const _LeadsSummaryPanel({
+    required this.total,
+    required this.newCount,
+    required this.contactedCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Resumen',
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$total',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: 36,
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Leads totales',
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Divider(color: TaploeColors.border),
+          const SizedBox(height: 8),
+          _LeadSummaryRow(
+            label: 'Nuevos',
+            value: newCount,
+            color: TaploeColors.blue,
+          ),
+          _LeadSummaryRow(
+            label: 'Contactados',
+            value: contactedCount,
+            color: TaploeColors.success,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeadSummaryRow extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _LeadSummaryRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          Text(
+            '$value',
+            style: GoogleFonts.dmSans(
+              color: context.text,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeadsFiltersPanel extends StatelessWidget {
+  final String statusFilter;
+  final String sourceFilter;
+  final List<String> sources;
+  final ValueChanged<String> onStatusChanged;
+  final ValueChanged<String> onSourceChanged;
+  final VoidCallback onClear;
+  final bool compact;
+
+  const _LeadsFiltersPanel({
+    required this.statusFilter,
+    required this.sourceFilter,
+    required this.sources,
+    required this.onStatusChanged,
+    required this.onSourceChanged,
+    required this.onClear,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Filtros',
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 18),
+        _LeadFilterDropdown(
+          label: 'Estado',
+          value: statusFilter,
+          items: const {
+            'all': 'Todos los estados',
+            'new': 'Nuevos',
+            'contacted': 'Contactados',
+          },
+          onChanged: onStatusChanged,
+        ),
+        const SizedBox(height: 16),
+        _LeadFilterDropdown(
+          label: 'Fuente',
+          value: sourceFilter,
+          items: {
+            'all': 'Todas las fuentes',
+            for (final source in sources) source: _leadSourceLabel(source),
+          },
+          onChanged: onSourceChanged,
+        ),
+        const SizedBox(height: 18),
+        const Divider(color: TaploeColors.border),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onClear,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: TaploeColors.black,
+              side: const BorderSide(color: TaploeColors.borderStrong),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text(
+              'Limpiar filtros',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ),
+      ],
+    );
+    if (compact) return content;
+    return TaploePanel(child: content);
+  }
+}
+
+class _LeadFilterDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final Map<String, String> items;
+  final ValueChanged<String> onChanged;
+
+  const _LeadFilterDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.dmSans(
+            color: context.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: TaploeColors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: TaploeColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: items.containsKey(value) ? value : 'all',
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              items: items.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (next) {
+                if (next != null) onChanged(next);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeadsToolbar extends StatelessWidget {
+  final TextEditingController controller;
+  final int total;
+  final String statusFilter;
+  final String sortMode;
+  final bool listView;
+  final String dateLabel;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onStatusChanged;
+  final ValueChanged<String> onSortChanged;
+  final ValueChanged<bool> onViewChanged;
+
+  const _LeadsToolbar({
+    required this.controller,
+    required this.total,
+    required this.statusFilter,
+    required this.sortMode,
+    required this.listView,
+    required this.dateLabel,
+    required this.onSearchChanged,
+    required this.onStatusChanged,
+    required this.onSortChanged,
+    required this.onViewChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 320,
+              child: TextField(
+                controller: controller,
+                onChanged: onSearchChanged,
+                decoration: const InputDecoration(
+                  hintText: 'Buscar leads...',
+                  prefixIcon: Icon(Icons.search_rounded),
+                ),
+              ),
+            ),
+            _LeadToolbarPill(
+              icon: Icons.calendar_today_rounded,
+              label: dateLabel,
+            ),
+            _LeadIconToggle(
+              icon: Icons.tune_rounded,
+              selected: false,
+              onTap: () {},
+            ),
+          ],
+        ),
+        const SizedBox(height: 22),
+        Row(
+          children: [
+            Expanded(
+              child: _LeadStatusTabs(
+                value: statusFilter,
+                onChanged: onStatusChanged,
+              ),
+            ),
+            if (context.isWide) ...[
+              Text(
+                'Ordenar por:',
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: sortMode,
+                  borderRadius: BorderRadius.circular(14),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'recent',
+                      child: Text('Más recientes'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'oldest',
+                      child: Text('Más antiguos'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) onSortChanged(value);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              _LeadIconToggle(
+                icon: Icons.view_list_rounded,
+                selected: listView,
+                onTap: () => onViewChanged(true),
+              ),
+              const SizedBox(width: 8),
+              _LeadIconToggle(
+                icon: Icons.grid_view_rounded,
+                selected: !listView,
+                onTap: () => onViewChanged(false),
+              ),
+            ],
+            const SizedBox(width: 8),
+            Text(
+              '$total total',
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _LeadToolbarPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _LeadToolbarPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: context.text,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Icon(icon, color: context.muted, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeadIconToggle extends StatelessWidget {
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LeadIconToggle({
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onTap,
+      style: IconButton.styleFrom(
+        foregroundColor: selected ? TaploeColors.blue : context.muted,
+        backgroundColor: TaploeColors.white,
+        side: BorderSide(
+          color: selected ? TaploeColors.blueBorder : TaploeColors.border,
+          width: selected ? 1.6 : 1,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        fixedSize: const Size(46, 46),
+      ),
+      icon: Icon(icon, size: 22),
+    );
+  }
+}
+
+class _LeadStatusTabs extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _LeadStatusTabs({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const tabs = {'all': 'Todos', 'new': 'Nuevos', 'contacted': 'Contactados'};
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: tabs.entries.map((entry) {
+          final selected = value == entry.key;
+          return Padding(
+            padding: const EdgeInsets.only(right: 22),
+            child: InkWell(
+              onTap: () => onChanged(entry.key),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      entry.value,
+                      style: GoogleFonts.dmSans(
+                        color: selected ? TaploeColors.blue : context.text,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      width: selected ? 72 : 0,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: TaploeColors.blue,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _LeadTimelineTile extends StatefulWidget {
+  final LeadModel lead;
+  final ValueChanged<String> onStatusChanged;
+  final VoidCallback onDelete;
+
+  const _LeadTimelineTile({
+    required this.lead,
+    required this.onStatusChanged,
+    required this.onDelete,
+  });
+
+  @override
+  State<_LeadTimelineTile> createState() => _LeadTimelineTileState();
+}
+
+class _LeadTimelineTileState extends State<_LeadTimelineTile> {
+  bool showAll = false;
+  bool loading = false;
+  List<AnalyticsEventModel> events = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTimeline();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LeadTimelineTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lead.id != widget.lead.id) {
+      events = const [];
+      showAll = false;
+      _loadTimeline();
+    }
+  }
+
+  Future<void> _loadTimeline() async {
+    if (events.isNotEmpty || loading) return;
+    setState(() => loading = true);
+    final rows = await AnalyticsRepository.fetchTimelineForLead(widget.lead.id);
+    if (mounted) {
+      setState(() {
+        events = rows;
+        loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = widget.lead;
+    final visibleEvents = showAll ? events : events.take(4).toList();
+    AnalyticsEventModel? formEvent;
+    for (final event in events) {
+      if (event.eventType == 'form_submit' && event.formSubmissionId != null) {
+        formEvent = event;
+        break;
+      }
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 860;
+          final leadInfo = Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: _leadStatusColor(lead.status),
+                child: Text(
+                  lead.displayName.isNotEmpty
+                      ? lead.displayName[0].toUpperCase()
+                      : '?',
+                  style: GoogleFonts.dmSans(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          lead.displayName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                            color: context.text,
+                          ),
+                        ),
+                        if (formEvent != null)
+                          TextButton.icon(
+                            onPressed: () =>
+                                _showSubmissionInfo(context, formEvent!),
+                            style: TextButton.styleFrom(
+                              foregroundColor: TaploeColors.blue,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            icon: const Icon(
+                              Icons.visibility_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              'Ver info',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    if (lead.company?.isNotEmpty == true)
+                      Text(
+                        lead.company!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: context.text,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 14,
+                      runSpacing: 8,
+                      children: [
+                        if (lead.email?.isNotEmpty == true)
+                          _LeadContactLine(
+                            icon: Icons.mail_outline_rounded,
+                            value: lead.email!,
+                          ),
+                        if (lead.phone?.isNotEmpty == true)
+                          _LeadContactLine(
+                            icon: Icons.phone_rounded,
+                            value: lead.phone!,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _LeadStatusBadge(status: lead.status),
+                        _SmallPill(
+                          label: _leadSourceLabel(lead.sourceChannel),
+                          icon: Icons.hub_outlined,
+                        ),
+                        _SmallPill(
+                          label: _relativeTime(lead.lastSeenAt),
+                          icon: Icons.schedule_rounded,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final timeline = loading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : events.isEmpty
+              ? const _MutedText('Aún no hay interacciones asociadas.')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _LeadTimeline(events: visibleEvents),
+                    if (events.length > 4)
+                      TextButton(
+                        onPressed: () => setState(() => showAll = !showAll),
+                        child: Text(
+                          showAll
+                              ? 'Ver menos'
+                              : 'Ver todos los eventos (${events.length})',
+                        ),
+                      ),
+                  ],
+                );
+          final actions = Column(
+            crossAxisAlignment: wide
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                lead.lastSeenAt == null ? '-' : _numericDate(lead.lastSeenAt!),
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _leadSourceIcon(lead.sourceChannel),
+                    color: context.muted,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      _shortLeadSourceLabel(lead.sourceChannel),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: context.muted,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => widget.onStatusChanged('contacted'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: TaploeColors.blue,
+                      side: const BorderSide(
+                        color: TaploeColors.blueBorder,
+                        width: 1.6,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 15,
+                      ),
+                    ),
+                    icon: const Icon(Icons.mail_rounded, size: 18),
+                    label: Text(
+                      lead.status == 'contacted' ? 'Contactado' : 'Contactar',
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Eliminar lead',
+                    onSelected: (value) {
+                      if (value == 'delete') widget.onDelete();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Eliminar lead'),
+                      ),
+                    ],
+                    icon: const Icon(Icons.more_vert_rounded),
+                  ),
+                ],
+              ),
+            ],
+          );
+          if (!wide) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                leadInfo,
+                const SizedBox(height: 18),
+                timeline,
+                const SizedBox(height: 18),
+                actions,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 4, child: leadInfo),
+              const SizedBox(width: 24),
+              Expanded(flex: 4, child: timeline),
+              const SizedBox(width: 24),
+              SizedBox(width: 220, child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LeadStatusBadge extends StatelessWidget {
+  final String status;
+
+  const _LeadStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _leadStatusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        _leadStatusLabel(status),
+        style: GoogleFonts.dmSans(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _LeadContactLine extends StatelessWidget {
+  final IconData icon;
+  final String value;
+
+  const _LeadContactLine({required this.icon, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: context.muted, size: 16),
+        const SizedBox(width: 7),
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeadTimeline extends StatelessWidget {
+  final List<AnalyticsEventModel> events;
+
+  const _LeadTimeline({required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < events.length; i++)
+          _LeadTimelineRow(event: events[i], isLast: i == events.length - 1),
+      ],
+    );
+  }
+}
+
+class _LeadTimelineRow extends StatelessWidget {
+  final AnalyticsEventModel event;
+  final bool isLast;
+
+  const _LeadTimelineRow({required this.event, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 28,
+          child: Column(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 6),
+                decoration: const BoxDecoration(
+                  color: TaploeColors.blue,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              if (!isLast)
+                Container(
+                  width: 1,
+                  height: 34,
+                  margin: const EdgeInsets.only(top: 4),
+                  color: TaploeColors.borderStrong,
+                ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 52,
+          child: Text(
+            _timeOnly(event.occurredAt),
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                _timelineEventLabel(event),
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (event.eventType == 'form_submit' &&
+                  event.formSubmissionId != null)
+                TextButton.icon(
+                  onPressed: () => _showSubmissionInfo(context, event),
+                  icon: const Icon(Icons.visibility_outlined, size: 16),
+                  label: const Text('Ver info'),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          _timelineDate(event.occurredAt),
+          style: GoogleFonts.dmSans(
+            color: context.muted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Icon(_timelineIcon(event), color: TaploeColors.blue, size: 15),
+      ],
     );
   }
 }

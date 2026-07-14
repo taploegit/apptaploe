@@ -75,6 +75,14 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         .toList();
     final emailLink = _firstLink(sortedLinks, 'email');
     final calendarLink = _firstLink(sortedLinks, 'calendar');
+    final directLinks = sortedLinks
+        .where(
+          (link) =>
+              link.linkType != 'email' &&
+              link.linkType != 'calendar' &&
+              !_isSocialOrWebsiteLink(link),
+        )
+        .toList();
     final visibleForms = forms.where((form) => form.isActive).toList();
     final visibleIntegrations = integrations
         .where((integration) => integration.isEnabled)
@@ -139,12 +147,26 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
       color: contentColor,
       height: 1.05,
     );
-    final bodyStyle = _profileFont(
+    final companyStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 22,
+      fontSize: 18,
+      fontWeight: FontWeight.w900,
+      color: contentColor,
+      height: 1.1,
+    );
+    final roleStyle = _profileFont(
+      theme.fontFamily,
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
+      color: mutedColor,
+      height: 1.16,
+    );
+    final bioStyle = _profileFont(
+      theme.fontFamily,
+      fontSize: 15,
       fontWeight: FontWeight.w500,
       color: mutedColor,
-      height: 1.12,
+      height: 1.32,
     );
     final sectionStyle = _profileFont(
       theme.fontFamily,
@@ -152,10 +174,9 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
       fontWeight: FontWeight.w900,
       color: contentColor,
     );
-    final jobLine = [
-      profile.jobTitle,
-      profile.companyName,
-    ].where((value) => value?.trim().isNotEmpty == true).join(' and ');
+    final companyName = profile.companyName?.trim() ?? '';
+    final jobTitle = profile.jobTitle?.trim() ?? '';
+    final bio = profile.bio?.trim() ?? '';
 
     final header = SizedBox(
       height: headerHeight,
@@ -168,10 +189,10 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             right: 0,
             height: coverHeight,
             child: coverUrl == null || coverUrl.isEmpty
-                ? const DecoratedBox(
+                ? DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFFF9FAFB), Color(0xFFEFF2F7)],
+                        colors: [backgroundStart, backgroundEnd],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -263,9 +284,26 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             ),
           ],
         ),
-        if (jobLine.isNotEmpty) ...[
+        if (companyName.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(companyName, textAlign: TextAlign.center, style: companyStyle),
+        ],
+        if (jobTitle.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(jobLine, textAlign: TextAlign.center, style: bodyStyle),
+          Text(jobTitle, textAlign: TextAlign.center, style: roleStyle),
+        ],
+        if (bio.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Text(
+              bio,
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: bioStyle,
+            ),
+          ),
         ],
         const SizedBox(height: 30),
         _PublicActionButton(
@@ -346,6 +384,29 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                 ),
             ],
           ),
+        ],
+        if (directLinks.isNotEmpty) ...[
+          const SizedBox(height: 28),
+          _SectionTitle('Contact', style: sectionStyle),
+          const SizedBox(height: 14),
+          for (final link in directLinks) ...[
+            _PublicActionButton(
+              label: link.label.isEmpty
+                  ? _defaultLinkLabel(link.linkType)
+                  : link.label,
+              icon: _publicLinkIcon(link.linkType),
+              trailing: Icons.arrow_forward_rounded,
+              primaryColor: primaryColor,
+              accentColor: accentColor,
+              textColor: contentColor,
+              surfaceColor: surfaceColor,
+              outlineColor: outlineColor,
+              radius: buttonRadius,
+              fontFamily: theme.fontFamily,
+              onTap: () => widget.onOpenLink?.call(link),
+            ),
+            const SizedBox(height: 10),
+          ],
         ],
         if (calendarLink != null || calendarIntegration != null) ...[
           const SizedBox(height: 30),
@@ -789,6 +850,43 @@ ProfileLinkModel? _firstLink(List<ProfileLinkModel> links, String type) {
     if (link.linkType == type) return link;
   }
   return null;
+}
+
+bool _isSocialOrWebsiteLink(ProfileLinkModel link) {
+  return _socialIconFor(link.linkType) != null || link.linkType == 'website';
+}
+
+IconData _publicLinkIcon(String type) {
+  switch (type) {
+    case 'phone':
+      return Icons.phone_outlined;
+    case 'maps':
+      return Icons.location_on_outlined;
+    case 'catalog':
+    case 'file':
+      return Icons.description_outlined;
+    case 'payment':
+      return Icons.payments_outlined;
+    default:
+      return Icons.link_rounded;
+  }
+}
+
+String _defaultLinkLabel(String type) {
+  switch (type) {
+    case 'phone':
+      return 'Call';
+    case 'maps':
+      return 'Location';
+    case 'catalog':
+      return 'Catalog';
+    case 'file':
+      return 'File';
+    case 'payment':
+      return 'Payment';
+    default:
+      return 'Open link';
+  }
 }
 
 IconData _integrationIcon(String? type) {

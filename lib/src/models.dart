@@ -49,6 +49,53 @@ class AppUserModel {
   };
 }
 
+class AppNotificationModel {
+  final String id;
+  final String userId;
+  final String? profileId;
+  final String? leadId;
+  final String notificationType;
+  final String title;
+  final String body;
+  final String? actionUrl;
+  final Map<String, dynamic> metadata;
+  final DateTime? readAt;
+  final DateTime? createdAt;
+
+  const AppNotificationModel({
+    required this.id,
+    required this.userId,
+    this.profileId,
+    this.leadId,
+    required this.notificationType,
+    required this.title,
+    required this.body,
+    this.actionUrl,
+    this.metadata = const {},
+    this.readAt,
+    this.createdAt,
+  });
+
+  bool get isUnread => readAt == null;
+
+  factory AppNotificationModel.fromJson(Map<String, dynamic> json) =>
+      AppNotificationModel(
+        id: json['id'] as String,
+        userId: json['user_id'] as String? ?? '',
+        profileId: json['profile_id'] as String?,
+        leadId: json['lead_id'] as String?,
+        notificationType: json['notification_type'] as String? ?? 'info',
+        title: json['title'] as String? ?? 'Notificación',
+        body: json['body'] as String? ?? '',
+        actionUrl: json['action_url'] as String?,
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : const {},
+        readAt: _dt(json['read_at']),
+        createdAt: _dt(json['created_at']),
+      );
+}
+
 class OrganizationModel {
   final String id;
   final String name;
@@ -918,24 +965,52 @@ class AnalyticsSummaryModel {
 
 class AnalyticsEventModel {
   final String id;
+  final String? leadId;
+  final String? linkId;
+  final String? linkLabel;
+  final String? formId;
+  final String? formSubmissionId;
   final String eventType;
   final String accessChannel;
+  final Map<String, dynamic> metadata;
   final DateTime? occurredAt;
 
   const AnalyticsEventModel({
     required this.id,
+    this.leadId,
+    this.linkId,
+    this.linkLabel,
+    this.formId,
+    this.formSubmissionId,
     required this.eventType,
     required this.accessChannel,
+    this.metadata = const {},
     this.occurredAt,
   });
 
   factory AnalyticsEventModel.fromJson(Map<String, dynamic> json) =>
       AnalyticsEventModel(
         id: json['id'] as String,
+        leadId: json['lead_id'] as String?,
+        linkId: json['link_id'] as String?,
+        linkLabel: _joinedLabel(json['profile_links']),
+        formId: json['form_id'] as String?,
+        formSubmissionId: json['form_submission_id'] as String?,
         eventType: json['event_type'] as String? ?? '',
         accessChannel: json['access_channel'] as String? ?? 'direct',
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : const {},
         occurredAt: _dt(json['occurred_at']),
       );
+}
+
+String? _joinedLabel(dynamic value) {
+  if (value is Map) return value['label'] as String?;
+  if (value is List && value.isNotEmpty && value.first is Map) {
+    return (value.first as Map)['label'] as String?;
+  }
+  return null;
 }
 
 class LeadEventModel {

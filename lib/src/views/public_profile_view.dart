@@ -52,6 +52,11 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       };
       if (channel == null && !loggedDirectView) {
         loggedDirectView = true;
+        await SessionStorage.saveVisitorAttribution(
+          accessPointId: 'direct',
+          channel: 'direct',
+          profileId: p.id,
+        );
         await AnalyticsRepository.insertEvent(
           profileId: p.id,
           eventType: 'profile_view',

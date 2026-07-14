@@ -11,7 +11,7 @@ class ProfileAssetRepository {
   static const bucket = 'profile-assets';
 
   static Future<String> uploadProfileAsset({
-    required String userId,
+    required String authUserId,
     required String profileId,
     required String kind,
     required Uint8List bytes,
@@ -20,14 +20,16 @@ class ProfileAssetRepository {
     final extension = _extensionFrom(fileName);
     final contentType = _contentTypeFor(extension);
     final path =
-        '$userId/$profileId/$kind-${DateTime.now().millisecondsSinceEpoch}.$extension';
+        '$authUserId/$profileId/$kind-${DateTime.now().millisecondsSinceEpoch}.$extension';
+
+    debugPrint('[TaploeStorage] Uploading $bucket/$path');
 
     await _db.storage
         .from(bucket)
         .uploadBinary(
           path,
           bytes,
-          fileOptions: FileOptions(contentType: contentType, upsert: true),
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
 
     return _db.storage.from(bucket).getPublicUrl(path);
@@ -112,6 +114,55 @@ class SessionStorage {
       'profileId': prefs.getString(_lastProfileIdKey),
       'visitorSessionId': prefs.getString(_visitorSessionIdKey),
     };
+  }
+}
+
+class NotificationRepository {
+  static Future<List<AppNotificationModel>> fetchRecent(String userId) async {
+    try {
+      final rows = await _db
+          .from('app_notifications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(12);
+      return (rows as List)
+          .map(
+            (row) =>
+                AppNotificationModel.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    } catch (error) {
+      debugPrint('[TaploeNotifications] No se pudieron cargar notificaciones.');
+      safePrintError(error);
+      return const [];
+    }
+  }
+
+  static Future<void> markAsRead(String notificationId) async {
+    try {
+      await _db
+          .from('app_notifications')
+          .update({'read_at': nowIso()})
+          .eq('id', notificationId)
+          .isFilter('read_at', null);
+    } catch (error) {
+      debugPrint('[TaploeNotifications] No se pudo marcar como leída.');
+      safePrintError(error);
+    }
+  }
+
+  static Future<void> markAllAsRead(String userId) async {
+    try {
+      await _db
+          .from('app_notifications')
+          .update({'read_at': nowIso()})
+          .eq('user_id', userId)
+          .isFilter('read_at', null);
+    } catch (error) {
+      debugPrint('[TaploeNotifications] No se pudieron marcar como leídas.');
+      safePrintError(error);
+    }
   }
 }
 
@@ -414,13 +465,18 @@ class ProfileRepository {
     profile_links(*)
   ''';
 
-  static Future<bool> slugExists(String slug) async {
-    final row = await _db
+  static Future<bool> slugExists(
+    String slug, {
+    String? excludeProfileId,
+  }) async {
+    final query = _db
         .from('digital_profiles')
         .select('id')
-        .eq('public_slug', slug)
-        .maybeSingle();
-    return row != null;
+        .eq('public_slug', slug);
+    final rows = excludeProfileId == null
+        ? await query.limit(1)
+        : await query.neq('id', excludeProfileId).limit(1);
+    return rows.isNotEmpty;
   }
 
   static Future<String> generateUniqueSlug(String base) async {
@@ -1016,6 +1072,14 @@ class AnalyticsRepository {
     required String channel,
     Map<String, dynamic>? metadata,
   }) async {
+    final attribution = await SessionStorage.getVisitorAttribution();
+    final visitorId = attribution['visitorSessionId'];
+    final resolvedLeadId =
+        leadId ??
+        await _resolveLeadIdForVisitor(
+          profileId: profileId,
+          visitorId: visitorId,
+        );
     await _db.from('analytics_events').insert({
       'profile_id': profileId,
       'physical_card_id': physicalCardId,
@@ -1023,12 +1087,35 @@ class AnalyticsRepository {
       'link_id': linkId,
       'form_id': formId,
       'form_submission_id': formSubmissionId,
-      'lead_id': leadId,
+      'lead_id': resolvedLeadId,
       'event_type': eventType,
       'access_channel': channel,
+      'visitor_id': visitorId,
+      'session_id': visitorId,
       'metadata': metadata ?? {},
       'occurred_at': nowIso(),
     });
+  }
+
+  static Future<String?> _resolveLeadIdForVisitor({
+    required String? profileId,
+    required String? visitorId,
+  }) async {
+    if (profileId == null || visitorId == null || visitorId.isEmpty) {
+      return null;
+    }
+    try {
+      final value = await _db.rpc(
+        'resolve_lead_id_for_visitor',
+        params: {'p_profile_id': profileId, 'p_visitor_id': visitorId},
+      );
+      final text = value?.toString();
+      return text == null || text.isEmpty ? null : text;
+    } catch (error) {
+      debugPrint('[TaploeAnalytics] No se pudo resolver lead del visitante.');
+      safePrintError(error);
+      return null;
+    }
   }
 
   static Future<void> recordProfileViewFromAccessPoint(
@@ -1165,7 +1252,9 @@ class AnalyticsRepository {
   }) async {
     final rows = await _db
         .from('analytics_events')
-        .select('id,event_type,access_channel,occurred_at')
+        .select(
+          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,metadata,occurred_at,profile_links(label)',
+        )
         .eq('profile_id', profileId)
         .order('occurred_at', ascending: false)
         .limit(limit);
@@ -1187,6 +1276,46 @@ class AnalyticsRepository {
     return (rows as List)
         .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  static Future<List<AnalyticsEventModel>> fetchTimelineForLead(
+    String leadId, {
+    int limit = 80,
+  }) async {
+    final rows = await _db
+        .from('analytics_events')
+        .select(
+          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,metadata,occurred_at,profile_links(label)',
+        )
+        .eq('lead_id', leadId)
+        .order('occurred_at', ascending: true)
+        .limit(limit);
+    return (rows as List)
+        .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<void> attachVisitorEventsToLead({
+    required String profileId,
+    required String leadId,
+  }) async {
+    final attribution = await SessionStorage.getVisitorAttribution();
+    final visitorId = attribution['visitorSessionId'];
+    if (visitorId == null || visitorId.isEmpty) return;
+
+    try {
+      await _db.rpc(
+        'attach_visitor_events_to_lead',
+        params: {
+          'p_profile_id': profileId,
+          'p_lead_id': leadId,
+          'p_visitor_id': visitorId,
+        },
+      );
+    } catch (error) {
+      debugPrint('[TaploeAnalytics] No se pudo enlazar timeline al lead.');
+      safePrintError(error);
+    }
   }
 }
 
@@ -1273,6 +1402,13 @@ class LeadRepository {
         .eq('id', leadId);
   }
 
+  static Future<void> deleteLead(String leadId) async {
+    await _db.rpc(
+      'delete_lead_for_current_user',
+      params: {'p_lead_id': leadId},
+    );
+  }
+
   static Future<List<LeadEventModel>> fetchEvents(String leadId) async {
     final rows = await _db
         .from('lead_events')
@@ -1295,6 +1431,17 @@ class LeadRepository {
     return (rows as List)
         .map((e) => FormSubmissionModel.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  static Future<FormSubmissionModel?> fetchSubmissionById(String id) async {
+    final row = await _db
+        .from('form_submissions')
+        .select()
+        .eq('id', id)
+        .maybeSingle();
+    return row == null
+        ? null
+        : FormSubmissionModel.fromJson(Map<String, dynamic>.from(row));
   }
 }
 
@@ -1412,6 +1559,10 @@ class SmartFormRepository {
       profile: profile,
       data: data,
       channel: channel,
+    );
+    await AnalyticsRepository.attachVisitorEventsToLead(
+      profileId: profile.id,
+      leadId: lead.id,
     );
 
     final submission = await _db
