@@ -18,6 +18,7 @@ class TaploePublicProfileCard extends StatefulWidget {
   final ValueChanged<SmartFormModel>? onOpenForm;
   final ValueChanged<ProfileIntegrationModel>? onOpenIntegration;
   final Widget Function(SmartFormModel form)? formBuilder;
+  final Widget? installPanel;
   final bool framed;
 
   const TaploePublicProfileCard({
@@ -32,6 +33,7 @@ class TaploePublicProfileCard extends StatefulWidget {
     this.onOpenForm,
     this.onOpenIntegration,
     this.formBuilder,
+    this.installPanel,
     this.framed = false,
   });
 
@@ -59,11 +61,11 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
     final forms = widget.forms;
     final integrations = widget.integrations;
     final framed = widget.framed;
-    const phoneWidth = 430.0;
-    const phoneHeight = 932.0;
-    const avatarRadius = 62.0;
-    const headerHeight = 326.0;
-    const coverHeight = headerHeight - avatarRadius;
+    final phoneWidth = framed ? 390.0 : 430.0;
+    final phoneHeight = framed ? 844.0 : 932.0;
+    final avatarRadius = framed ? 46.0 : 60.0;
+    final headerHeight = framed ? 214.0 : 270.0;
+    final coverHeight = headerHeight - avatarRadius;
     final sortedLinks = links.where((link) => link.isVisible).toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     final socialLinks = sortedLinks
@@ -142,36 +144,36 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
     };
     final headingStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 34,
-      fontWeight: FontWeight.w900,
+      fontSize: framed ? 28 : 36,
+      fontWeight: FontWeight.w600,
       color: contentColor,
       height: 1.05,
     );
     final companyStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 18,
-      fontWeight: FontWeight.w900,
+      fontSize: framed ? 16 : 19,
+      fontWeight: FontWeight.w600,
       color: contentColor,
       height: 1.1,
     );
     final roleStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 17,
+      fontSize: framed ? 15 : 18,
       fontWeight: FontWeight.w600,
       color: mutedColor,
       height: 1.16,
     );
     final bioStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 15,
+      fontSize: framed ? 12 : 15,
       fontWeight: FontWeight.w500,
       color: mutedColor,
       height: 1.32,
     );
     final sectionStyle = _profileFont(
       theme.fontFamily,
-      fontSize: 22,
-      fontWeight: FontWeight.w900,
+      fontSize: framed ? 16 : 22,
+      fontWeight: FontWeight.w600,
       color: contentColor,
     );
     final companyName = profile.companyName?.trim() ?? '';
@@ -204,29 +206,17 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                     filterQuality: FilterQuality.high,
                   ),
           ),
-          if (framed)
-            Positioned(
-              top: 16,
-              child: Container(
-                width: 126,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: TaploeColors.black,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
           Positioned(
-            top: framed ? 96 : 72,
+            top: framed ? 52 : 56,
             child: logoUrl == null || logoUrl.isEmpty
                 ? TaploeLogo(
-                    size: 48,
+                    size: framed ? 40 : 48,
                     centered: true,
                     color: TaploeColors.black,
                   )
                 : Image.network(
                     logoUrl,
-                    height: 54,
+                    height: framed ? 44 : 52,
                     fit: BoxFit.contain,
                     filterQuality: FilterQuality.high,
                   ),
@@ -249,8 +239,8 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                       style: _profileFont(
                         theme.fontFamily,
                         color: TaploeColors.black,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 34,
+                        fontWeight: FontWeight.w600,
+                        fontSize: framed ? 30 : 38,
                       ),
                     )
                   : null,
@@ -276,26 +266,28 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                 style: headingStyle,
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.verified_rounded,
-              color: Color(0xFF1DA1F2),
-              size: 24,
-            ),
+            if (profile.showVerifiedBadge) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.verified_rounded,
+                color: const Color(0xFF1DA1F2),
+                size: framed ? 20 : 25,
+              ),
+            ],
           ],
         ),
         if (companyName.isNotEmpty) ...[
-          const SizedBox(height: 6),
+          SizedBox(height: framed ? 7 : 7),
           Text(companyName, textAlign: TextAlign.center, style: companyStyle),
         ],
         if (jobTitle.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: framed ? 5 : 5),
           Text(jobTitle, textAlign: TextAlign.center, style: roleStyle),
         ],
         if (bio.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: framed ? 9 : 12),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            padding: EdgeInsets.symmetric(horizontal: framed ? 10 : 18),
             child: Text(
               bio,
               textAlign: TextAlign.center,
@@ -305,7 +297,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             ),
           ),
         ],
-        const SizedBox(height: 30),
+        SizedBox(height: framed ? 16 : 22),
         _PublicActionButton(
           label: 'Save contact',
           icon: Icons.person_add_alt_1_rounded,
@@ -317,9 +309,10 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
           outlineColor: outlineColor,
           radius: buttonRadius,
           fontFamily: theme.fontFamily,
+          compact: framed,
           onTap: widget.onSaveContact,
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: framed ? 10 : 14),
         if (emailLink == null)
           _PublicActionButton(
             label: 'Share',
@@ -331,6 +324,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             outlineColor: outlineColor,
             radius: buttonRadius,
             fontFamily: theme.fontFamily,
+            compact: framed,
             onTap: widget.onShare,
           )
         else
@@ -347,10 +341,11 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                   outlineColor: outlineColor,
                   radius: buttonRadius,
                   fontFamily: theme.fontFamily,
+                  compact: framed,
                   onTap: () => widget.onOpenLink?.call(emailLink),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: framed ? 8 : 12),
               Expanded(
                 child: _PublicActionButton(
                   label: 'Share',
@@ -362,33 +357,39 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                   outlineColor: outlineColor,
                   radius: buttonRadius,
                   fontFamily: theme.fontFamily,
+                  compact: framed,
                   onTap: widget.onShare,
                 ),
               ),
             ],
           ),
+        if (widget.installPanel != null) ...[
+          const SizedBox(height: 16),
+          widget.installPanel!,
+        ],
         if (socialLinks.isNotEmpty) ...[
-          const SizedBox(height: 28),
+          SizedBox(height: framed ? 18 : 24),
           _SectionTitle('Connect with me', style: sectionStyle),
-          const SizedBox(height: 14),
+          SizedBox(height: framed ? 10 : 14),
           Wrap(
-            spacing: 14,
-            runSpacing: 12,
+            spacing: framed ? 10 : 14,
+            runSpacing: framed ? 10 : 12,
             children: [
               for (final link in socialLinks)
                 _SocialCircle(
                   link: link,
                   surfaceColor: surfaceColor,
                   outlineColor: outlineColor,
+                  compact: framed,
                   onTap: () => widget.onOpenLink?.call(link),
                 ),
             ],
           ),
         ],
         if (directLinks.isNotEmpty) ...[
-          const SizedBox(height: 28),
+          SizedBox(height: framed ? 18 : 24),
           _SectionTitle('Contact', style: sectionStyle),
-          const SizedBox(height: 14),
+          SizedBox(height: framed ? 10 : 14),
           for (final link in directLinks) ...[
             _PublicActionButton(
               label: link.label.isEmpty
@@ -403,15 +404,16 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
               outlineColor: outlineColor,
               radius: buttonRadius,
               fontFamily: theme.fontFamily,
+              compact: framed,
               onTap: () => widget.onOpenLink?.call(link),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: framed ? 8 : 10),
           ],
         ],
         if (calendarLink != null || calendarIntegration != null) ...[
-          const SizedBox(height: 30),
+          SizedBox(height: framed ? 18 : 24),
           _SectionTitle('Schedule a meeting', style: sectionStyle),
-          const SizedBox(height: 14),
+          SizedBox(height: framed ? 10 : 14),
           _PublicActionButton(
             label: calendarLink != null
                 ? (calendarLink.label.isEmpty
@@ -430,6 +432,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             outlineColor: outlineColor,
             radius: buttonRadius,
             fontFamily: theme.fontFamily,
+            compact: framed,
             onTap: () {
               if (calendarLink != null) {
                 widget.onOpenLink?.call(calendarLink);
@@ -445,12 +448,12 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                   integration.integration?.integrationType != 'calendar',
             )
             .isNotEmpty) ...[
-          const SizedBox(height: 26),
+          SizedBox(height: framed ? 18 : 26),
           _SectionTitle('Tools', style: sectionStyle),
-          const SizedBox(height: 12),
+          SizedBox(height: framed ? 10 : 12),
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: framed ? 8 : 10,
+            runSpacing: framed ? 8 : 10,
             children: [
               for (final integration in visibleIntegrations.where(
                 (item) => item.integration?.integrationType != 'calendar',
@@ -474,9 +477,9 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
           ),
         ],
         if (visibleForms.isNotEmpty) ...[
-          const SizedBox(height: 26),
+          SizedBox(height: framed ? 18 : 26),
           _SectionTitle('Contact form', style: sectionStyle),
-          const SizedBox(height: 12),
+          SizedBox(height: framed ? 10 : 12),
           for (final form in visibleForms.take(2)) ...[
             _PublicFormDropdown(
               label: form.name,
@@ -488,6 +491,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
               outlineColor: outlineColor,
               radius: buttonRadius,
               fontFamily: theme.fontFamily,
+              compact: framed,
               onTap: () => _toggleForm(form),
               child: widget.formBuilder?.call(form),
             ),
@@ -510,49 +514,68 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         borderRadius: BorderRadius.circular(framed ? 32 : 28),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: framed ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          header,
-          if (framed)
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-                child: content,
+      child: framed
+          ? SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 22),
+                    child: content,
+                  ),
+                ],
               ),
             )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-              child: content,
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                header,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+                  child: content,
+                ),
+              ],
             ),
-        ],
-      ),
     );
 
-    final card = framed
-        ? SizedBox(width: phoneWidth, height: phoneHeight, child: surface)
-        : surface;
-
     if (!framed) {
-      return card;
+      return surface;
     }
 
-    final scaledCard = FittedBox(fit: BoxFit.contain, child: card);
-
-    return AspectRatio(
-      aspectRatio: phoneWidth / phoneHeight,
+    return SizedBox(
+      width: phoneWidth,
+      height: phoneHeight,
       child: Container(
         decoration: BoxDecoration(
-          color: TaploeColors.black,
-          borderRadius: BorderRadius.circular(38),
-          border: Border.all(color: TaploeColors.black, width: 6),
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(50),
+          boxShadow: [
+            BoxShadow(
+              color: TaploeColors.black.withValues(alpha: .18),
+              blurRadius: 26,
+              offset: const Offset(0, 16),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.all(8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(31),
-          child: scaledCard,
+        padding: const EdgeInsets.fromLTRB(11, 15, 11, 11),
+        child: Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            ClipRRect(borderRadius: BorderRadius.circular(39), child: surface),
+            Positioned(
+              top: 6,
+              child: Container(
+                width: 112,
+                height: 27,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -584,6 +607,7 @@ class _PublicActionButton extends StatelessWidget {
   final Color outlineColor;
   final double radius;
   final String fontFamily;
+  final bool compact;
   final VoidCallback? onTap;
 
   const _PublicActionButton({
@@ -599,6 +623,7 @@ class _PublicActionButton extends StatelessWidget {
     this.outlineColor = TaploeColors.border,
     this.radius = 18,
     this.fontFamily = 'system',
+    this.compact = false,
     this.onTap,
   });
 
@@ -606,12 +631,29 @@ class _PublicActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = primary ? primaryColor : surfaceColor;
     final foreground = primary ? primaryForeground : textColor;
+    final iconSize = compact ? 21.0 : 26.0;
+    final labelSize = compact ? 16.5 : 18.0;
+    final trailingSize = compact ? 24.0 : 30.0;
+    final gap = compact ? 8.0 : 12.0;
+    final text = Text(
+      label,
+      maxLines: 1,
+      style: _profileFont(
+        fontFamily,
+        color: foreground,
+        fontSize: labelSize,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+
     return InkWell(
       borderRadius: BorderRadius.circular(radius),
       onTap: onTap,
       child: Container(
-        height: 62,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        constraints: BoxConstraints(minHeight: compact ? 50 : 62),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? (primary ? 16 : 12) : (primary ? 20 : 16),
+        ),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(radius),
@@ -623,24 +665,30 @@ class _PublicActionButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: primary ? foreground : accentColor, size: 26),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _profileFont(
-                  fontFamily,
-                  color: foreground,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+            Icon(
+              icon,
+              color: primary ? foreground : accentColor,
+              size: iconSize,
+            ),
+            SizedBox(width: gap),
+            if (trailing == null)
+              Flexible(
+                child: FittedBox(fit: BoxFit.scaleDown, child: text),
+              )
+            else
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: text,
+                  ),
                 ),
               ),
-            ),
             if (trailing != null) ...[
-              const Spacer(),
-              Icon(trailing, color: foreground, size: 30),
+              SizedBox(width: gap),
+              Icon(trailing, color: foreground, size: trailingSize),
             ],
           ],
         ),
@@ -659,6 +707,7 @@ class _PublicFormDropdown extends StatelessWidget {
   final Color outlineColor;
   final double radius;
   final String fontFamily;
+  final bool compact;
   final VoidCallback? onTap;
   final Widget? child;
 
@@ -672,6 +721,7 @@ class _PublicFormDropdown extends StatelessWidget {
     required this.outlineColor,
     required this.radius,
     required this.fontFamily,
+    this.compact = false,
     this.onTap,
     this.child,
   });
@@ -679,6 +729,10 @@ class _PublicFormDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dropdownRadius = radius > 28 ? 28.0 : radius;
+    final iconSize = compact ? 21.0 : 26.0;
+    final labelSize = compact ? 16.5 : 18.0;
+    final trailingSize = compact ? 24.0 : 30.0;
+    final gap = compact ? 8.0 : 12.0;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
@@ -694,17 +748,17 @@ class _PublicFormDropdown extends StatelessWidget {
           InkWell(
             onTap: onTap,
             child: SizedBox(
-              height: 62,
+              height: compact ? 50 : 62,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20),
                 child: Row(
                   children: [
                     Icon(
                       Icons.dynamic_form_outlined,
                       color: accentColor,
-                      size: 26,
+                      size: iconSize,
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: gap),
                     Expanded(
                       child: Text(
                         label,
@@ -713,8 +767,8 @@ class _PublicFormDropdown extends StatelessWidget {
                         style: _profileFont(
                           fontFamily,
                           color: textColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                          fontSize: labelSize,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -723,7 +777,7 @@ class _PublicFormDropdown extends StatelessWidget {
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       color: textColor,
-                      size: 30,
+                      size: trailingSize,
                     ),
                   ],
                 ),
@@ -796,7 +850,7 @@ class _PublicMiniPill extends StatelessWidget {
                   fontFamily,
                   color: textColor,
                   fontSize: 15,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -811,12 +865,14 @@ class _SocialCircle extends StatelessWidget {
   final ProfileLinkModel link;
   final Color surfaceColor;
   final Color outlineColor;
+  final bool compact;
   final VoidCallback? onTap;
 
   const _SocialCircle({
     required this.link,
     required this.surfaceColor,
     required this.outlineColor,
+    this.compact = false,
     this.onTap,
   });
 
@@ -828,8 +884,8 @@ class _SocialCircle extends StatelessWidget {
       customBorder: const CircleBorder(),
       onTap: onTap,
       child: Container(
-        width: 66,
-        height: 66,
+        width: compact ? 52 : 66,
+        height: compact ? 52 : 66,
         decoration: BoxDecoration(
           color: surfaceColor,
           shape: BoxShape.circle,
@@ -837,8 +893,12 @@ class _SocialCircle extends StatelessWidget {
         ),
         child: Center(
           child: faIcon == null
-              ? Icon(Icons.language_rounded, color: color, size: 38)
-              : FaIcon(faIcon, color: color, size: 36),
+              ? Icon(
+                  Icons.language_rounded,
+                  color: color,
+                  size: compact ? 30 : 38,
+                )
+              : FaIcon(faIcon, color: color, size: compact ? 29 : 36),
         ),
       ),
     );
@@ -1003,7 +1063,7 @@ TextStyle _profileFont(
         height: height,
       );
     default:
-      return fontWeight.value >= FontWeight.w800.value
+      return fontWeight.value >= FontWeight.w600.value
           ? GoogleFonts.outfit(
               fontSize: fontSize,
               fontWeight: fontWeight,

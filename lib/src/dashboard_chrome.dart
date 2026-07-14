@@ -64,7 +64,7 @@ class TaploeDashboardSidebar extends StatelessWidget {
                         initials(name),
                         style: const TextStyle(
                           color: TaploeColors.white,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -76,7 +76,7 @@ class TaploeDashboardSidebar extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           fontSize: 16,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           color: TaploeColors.black,
                         ),
                       ),
@@ -144,7 +144,7 @@ class TaploeDashboardSidebar extends StatelessWidget {
                           'Crear',
                           style: GoogleFonts.dmSans(
                             color: TaploeColors.white,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             fontSize: 15,
                           ),
                         ),
@@ -164,7 +164,7 @@ class TaploeDashboardSidebar extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: TaploeColors.disabled,
                     fontSize: 11,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: 0,
                   ),
                 ),
@@ -310,7 +310,7 @@ class _ProfileSelectorFace extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: TaploeColors.textSecondary,
                     fontSize: 12,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     height: 1,
                   ),
                 ),
@@ -332,7 +332,7 @@ class _ProfileSelectorFace extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.dmSans(
                           color: TaploeColors.black,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           fontSize: sidebar ? 13 : 14,
                           height: 1,
                         ),
@@ -363,30 +363,33 @@ class _ProfileSelectorMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          Icons.person_outline_rounded,
-          size: 18,
-          color: active ? TaploeColors.blue : TaploeColors.textSecondary,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            profile.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.dmSans(
-              color: TaploeColors.black,
-              fontWeight: active ? FontWeight.w900 : FontWeight.w800,
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.person_outline_rounded,
+            size: 18,
+            color: active ? TaploeColors.blue : TaploeColors.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              profile.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.black,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w600,
+              ),
             ),
           ),
-        ),
-        if (active) ...[
-          const SizedBox(width: 10),
-          const Icon(Icons.check_rounded, size: 18, color: TaploeColors.blue),
+          if (active) ...[
+            const SizedBox(width: 10),
+            const Icon(Icons.check_rounded, size: 18, color: TaploeColors.blue),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -433,7 +436,7 @@ class _SidebarItem extends StatelessWidget {
                 child: Text(
                   item.label,
                   style: GoogleFonts.dmSans(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     color: active ? TaploeColors.white : TaploeColors.black,
                   ),
                 ),
@@ -508,7 +511,7 @@ class TaploeDashboardHeader extends StatelessWidget {
                     'Perfil incompleto',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: TaploeColors.textSecondary,
                     ),
                   ),
@@ -527,13 +530,35 @@ class TaploeDashboardHeader extends StatelessWidget {
           const SizedBox(width: 12),
           PopupMenuButton<String>(
             tooltip: 'Cuenta',
+            offset: const Offset(0, 12),
+            constraints: const BoxConstraints(minWidth: 220),
+            color: TaploeColors.white,
+            surfaceTintColor: TaploeColors.white,
+            elevation: 10,
+            shadowColor: TaploeColors.black.withValues(alpha: .12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: TaploeColors.border),
+            ),
             onSelected: (value) {
               if (value == 'settings') onSettings();
               if (value == 'logout') onSignOut();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'settings', child: Text('Configuración')),
-              PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
+              PopupMenuItem(
+                value: 'settings',
+                child: _AccountMenuItem(
+                  icon: Icons.settings_outlined,
+                  label: 'Configuración',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: _AccountMenuItem(
+                  icon: Icons.logout_rounded,
+                  label: 'Cerrar sesión',
+                ),
+              ),
             ],
             child: CircleAvatar(
               radius: 21,
@@ -546,7 +571,7 @@ class TaploeDashboardHeader extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   color: TaploeColors.white,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -610,6 +635,35 @@ class _HeaderActiveProfileSelector extends StatelessWidget {
   }
 }
 
+class _AccountMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _AccountMenuItem({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: TaploeColors.textSecondary),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class TaploeMobileHeader extends StatelessWidget
     implements PreferredSizeWidget {
   final VoidCallback? onMenu;
@@ -639,7 +693,7 @@ class TaploeMobileHeader extends StatelessWidget
             ),
             style: const TextStyle(
               color: TaploeColors.white,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
           ),

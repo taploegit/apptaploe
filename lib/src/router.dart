@@ -17,9 +17,17 @@ final taploeRouter = GoRouter(
         path.startsWith('/a/') ||
         path.startsWith('/activate/') ||
         path == '/login' ||
-        path == '/otp';
+        path == '/otp' ||
+        path == '/auth-loading';
 
-    if (taploeState.bootstrapping) return null;
+    if (taploeState.bootstrapping) {
+      final hasAuthSession = taploeState.client.auth.currentUser != null;
+      if (hasAuthSession && path != '/auth-loading') return '/auth-loading';
+      return null;
+    }
+    if (path == '/auth-loading') {
+      return taploeState.signedIn ? '/' : '/login';
+    }
     if (path == '/signup') {
       final token = state.uri.queryParameters['token'];
       return token == null ? '/login' : '/login?token=$token';
@@ -98,6 +106,10 @@ final taploeRouter = GoRouter(
           pendingToken: state.uri.queryParameters['token'],
         );
       },
+    ),
+    GoRoute(
+      path: '/auth-loading',
+      builder: (context, state) => const AuthLoadingView(),
     ),
     GoRoute(
       path: '/a/:token',

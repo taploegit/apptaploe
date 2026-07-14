@@ -412,6 +412,7 @@ class DigitalProfileModel {
   final String? logoUrl;
   final String status;
   final bool isDefault;
+  final bool showVerifiedBadge;
   final ProfileThemeModel? theme;
   final ProfileVcardModel? vcard;
   final List<ProfileLinkModel> links;
@@ -431,6 +432,7 @@ class DigitalProfileModel {
     this.logoUrl,
     this.status = 'active',
     this.isDefault = false,
+    this.showVerifiedBadge = false,
     this.theme,
     this.vcard,
     this.links = const [],
@@ -474,6 +476,7 @@ class DigitalProfileModel {
       logoUrl: json['logo_url'] as String?,
       status: json['status'] as String? ?? 'active',
       isDefault: json['is_default'] as bool? ?? false,
+      showVerifiedBadge: json['show_verified_badge'] as bool? ?? false,
       theme: themeJson == null ? null : ProfileThemeModel.fromJson(themeJson),
       vcard: vcardJson == null ? null : ProfileVcardModel.fromJson(vcardJson),
       links: links,
@@ -492,6 +495,7 @@ class DigitalProfileModel {
     'logo_url': logoUrl,
     'status': status,
     'is_default': isDefault,
+    'show_verified_badge': showVerifiedBadge,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   };
 
@@ -504,6 +508,7 @@ class DigitalProfileModel {
     String? profilePhotoUrl,
     String? coverPhotoUrl,
     String? logoUrl,
+    bool? showVerifiedBadge,
     ProfileThemeModel? theme,
     ProfileVcardModel? vcard,
     List<ProfileLinkModel>? links,
@@ -522,6 +527,7 @@ class DigitalProfileModel {
     logoUrl: logoUrl ?? this.logoUrl,
     status: status,
     isDefault: isDefault,
+    showVerifiedBadge: showVerifiedBadge ?? this.showVerifiedBadge,
     theme: theme ?? this.theme,
     vcard: vcard ?? this.vcard,
     links: links ?? this.links,
@@ -580,8 +586,6 @@ class ProfileAccessPointModel {
         return 'Escaneo QR';
       case 'nfc':
         return 'Toque NFC';
-      case 'wallet':
-        return 'Wallet';
       case 'manual':
         return 'Manual';
       default:
@@ -972,6 +976,9 @@ class AnalyticsEventModel {
   final String? formSubmissionId;
   final String eventType;
   final String accessChannel;
+  final String? city;
+  final String? region;
+  final String? country;
   final Map<String, dynamic> metadata;
   final DateTime? occurredAt;
 
@@ -984,6 +991,9 @@ class AnalyticsEventModel {
     this.formSubmissionId,
     required this.eventType,
     required this.accessChannel,
+    this.city,
+    this.region,
+    this.country,
     this.metadata = const {},
     this.occurredAt,
   });
@@ -998,6 +1008,9 @@ class AnalyticsEventModel {
         formSubmissionId: json['form_submission_id'] as String?,
         eventType: json['event_type'] as String? ?? '',
         accessChannel: json['access_channel'] as String? ?? 'direct',
+        city: json['city'] as String?,
+        region: json['region'] as String?,
+        country: json['country'] as String?,
         metadata: json['metadata'] is Map
             ? Map<String, dynamic>.from(json['metadata'] as Map)
             : const {},

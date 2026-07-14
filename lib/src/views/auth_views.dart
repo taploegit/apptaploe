@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -28,22 +29,13 @@ class AuthLayout extends StatelessWidget {
 
             return SingleChildScrollView(
               padding: EdgeInsets.symmetric(
-                horizontal: desktop ? 64 : 20,
-                vertical: desktop ? 36 : 22,
+                horizontal: desktop ? 48 : 20,
+                vertical: desktop ? 54 : 22,
               ),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1280),
-                  child: desktop
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Expanded(flex: 11, child: _AuthIntro()),
-                            const SizedBox(width: 64),
-                            Expanded(flex: 8, child: _AuthPanel(child: child)),
-                          ],
-                        )
-                      : _AuthPanel(showLogo: true, child: child),
+                  constraints: BoxConstraints(maxWidth: desktop ? 760 : 560),
+                  child: _AuthPanel(child: child),
                 ),
               ),
             );
@@ -54,226 +46,22 @@ class AuthLayout extends StatelessWidget {
   }
 }
 
-class _AuthIntro extends StatelessWidget {
-  static const String _assetPath = 'assets/images/taploe-auth.png';
-
-  const _AuthIntro();
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 650),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const TaploeLogo(size: 48),
-          const SizedBox(height: 46),
-          Text.rich(
-            TextSpan(
-              children: [
-                const TextSpan(text: 'Comparte tu contacto\nen un solo toque'),
-                TextSpan(
-                  text: '.',
-                  style: GoogleFonts.outfit(color: TaploeColors.blue),
-                ),
-              ],
-            ),
-            style: GoogleFonts.outfit(
-              fontSize: 58,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-              height: .98,
-              color: TaploeColors.black,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Accede a tu perfil, administra tus tarjetas y revisa tus interacciones desde un solo lugar.',
-            style: GoogleFonts.dmSans(
-              fontSize: 18,
-              color: TaploeColors.muted,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 26),
-          const Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _Benefit(label: 'Perfil digital editable'),
-              _Benefit(label: 'Activación por QR y NFC'),
-              _Benefit(label: 'Métricas de interacción'),
-            ],
-          ),
-          const SizedBox(height: 34),
-          Image.asset(
-            _assetPath,
-            width: 610,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-            errorBuilder: (_, _, _) => const _AuthIllustrationFallback(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AuthIllustrationFallback extends StatelessWidget {
-  const _AuthIllustrationFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return TaploePanel(
-      padding: const EdgeInsets.all(30),
-      color: TaploeColors.soft,
-      child: Row(
-        children: [
-          Expanded(
-            child: AspectRatio(
-              aspectRatio: .58,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: TaploeColors.black,
-                  borderRadius: BorderRadius.circular(34),
-                ),
-                padding: const EdgeInsets.all(8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: TaploeColors.white,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TaploeLogo(size: 22, centered: true),
-                      SizedBox(height: 18),
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: TaploeColors.blueSoft,
-                        child: Icon(Icons.person_rounded),
-                      ),
-                      SizedBox(height: 14),
-                      Text(
-                        'Tu perfil Taploe',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 26),
-          const Expanded(
-            flex: 2,
-            child: Column(
-              children: [
-                _MiniFeature(
-                  icon: Icons.contact_page_outlined,
-                  title: 'Perfil digital',
-                ),
-                SizedBox(height: 12),
-                _MiniFeature(
-                  icon: Icons.credit_card_rounded,
-                  title: 'Tarjetas activas',
-                ),
-                SizedBox(height: 12),
-                _MiniFeature(
-                  icon: Icons.insights_rounded,
-                  title: 'Analítica real',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniFeature extends StatelessWidget {
-  final IconData icon;
-  final String title;
-
-  const _MiniFeature({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return TaploePanel(
-      padding: const EdgeInsets.all(16),
-      radius: 18,
-      child: Row(
-        children: [
-          Icon(icon, color: TaploeColors.blue),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Benefit extends StatelessWidget {
-  final String label;
-
-  const _Benefit({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-      decoration: BoxDecoration(
-        color: TaploeColors.white,
-        borderRadius: BorderRadius.circular(TaploeRadius.pill),
-        border: Border.all(color: TaploeColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            size: 17,
-            color: TaploeColors.blue,
-          ),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: GoogleFonts.dmSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: TaploeColors.black,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AuthPanel extends StatelessWidget {
   final Widget child;
-  final bool showLogo;
 
-  const _AuthPanel({required this.child, this.showLogo = false});
+  const _AuthPanel({required this.child});
 
   @override
   Widget build(BuildContext context) {
     return TaploePanel(
-      padding: EdgeInsets.all(context.isMobile ? 24 : 34),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.isMobile ? 22 : 42,
+        vertical: context.isMobile ? 26 : 46,
+      ),
       radius: 30,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (showLogo) ...[
-            const TaploeLogo(size: 39, centered: true),
-            const SizedBox(height: 30),
-          ],
           child,
           const SizedBox(height: 26),
           const Divider(),
@@ -283,7 +71,7 @@ class _AuthPanel extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: TaploeColors.black,
             ),
           ),
@@ -311,6 +99,7 @@ class LoginView extends StatefulWidget {
 class _LoginViewState extends State<LoginView> {
   final email = TextEditingController();
   bool loading = false;
+  String? oauthLoading;
   String? error;
 
   @override
@@ -363,34 +152,67 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  Future<void> continueWithOAuth(
+    OAuthProvider provider,
+    String providerName,
+  ) async {
+    setState(() {
+      oauthLoading = providerName;
+      error = null;
+    });
+
+    try {
+      final pending = widget.pendingToken?.trim();
+      if (pending != null && pending.isNotEmpty) {
+        await taploeState.savePendingActivationToken(pending);
+      }
+      await AuthRepository.signInWithOAuth(provider);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => error = _friendlyAuthError(e.message));
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => error = 'No se pudo abrir $providerName. Intenta de nuevo.',
+      );
+    } finally {
+      if (mounted) setState(() => oauthLoading = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AuthLayout(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          const TaploeLogo(size: 48, centered: true),
+          const SizedBox(height: 62),
           Text(
-            'Iniciar sesión',
+            'Inicia sesión o crea tu cuenta en segundos',
+            textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
-              fontSize: 36,
-              fontWeight: FontWeight.w900,
+              fontSize: context.isMobile ? 36 : 48,
+              fontWeight: FontWeight.w600,
               letterSpacing: 0,
+              height: 1.05,
               color: TaploeColors.black,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
           Text(
-            'Entra con tu correo. Te enviaremos un código para continuar.',
+            'Usa tu correo o continúa con otro servicio. Revisaremos si ya tienes cuenta o te ayudaremos a crear una.',
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: TaploeColors.muted,
-              fontSize: 15,
-              height: 1.45,
+              fontSize: context.isMobile ? 16 : 20,
+              height: 1.5,
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 36),
           TaploeTextField(
             label: 'Correo electrónico',
-            hint: 'tu@empresa.com',
+            hint: 'Email',
             controller: email,
             keyboardType: TextInputType.emailAddress,
             errorText: error,
@@ -404,22 +226,123 @@ class _LoginViewState extends State<LoginView> {
           ),
           const SizedBox(height: 20),
           TaploeButton(
-            label: 'Enviar código',
+            label: 'Continuar',
             icon: Icons.arrow_forward_rounded,
             loading: loading,
             expanded: true,
             onPressed: send,
           ),
-          const SizedBox(height: 14),
-          Text(
-            'Al continuar aceptas recibir un código temporal de acceso.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: TaploeColors.disabled,
+          const SizedBox(height: 26),
+          const _AuthDivider(label: 'o'),
+          const SizedBox(height: 22),
+          _OAuthButton(
+            label: 'Continuar con Google',
+            icon: SvgPicture.asset(
+              'assets/images/icons/google-icon.svg',
+              width: 22,
+              height: 22,
+            ),
+            loading: oauthLoading == 'Google',
+            onPressed: loading || oauthLoading != null
+                ? null
+                : () => continueWithOAuth(OAuthProvider.google, 'Google'),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: Text(
+              'Al continuar aceptas recibir un código temporal de acceso.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: TaploeColors.disabled,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AuthDivider extends StatelessWidget {
+  final String label;
+
+  const _AuthDivider({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: TaploeColors.muted,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+}
+
+class _OAuthButton extends StatelessWidget {
+  final String label;
+  final Widget icon;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  const _OAuthButton({
+    required this.label,
+    required this.icon,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: TaploeColors.black,
+          side: const BorderSide(color: TaploeColors.borderStrong),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(TaploeRadius.input),
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 26, child: Center(child: icon)),
+            ),
+            if (loading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  color: TaploeColors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -570,7 +493,7 @@ class _OtpViewState extends State<OtpView> {
             'Revisa tu correo',
             style: GoogleFonts.outfit(
               fontSize: 36,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               letterSpacing: 0,
               color: TaploeColors.black,
             ),
@@ -599,7 +522,7 @@ class _OtpViewState extends State<OtpView> {
             },
             style: GoogleFonts.outfit(
               fontSize: context.isMobile ? 26 : 32,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               letterSpacing: context.isMobile ? 7 : 11,
               color: TaploeColors.black,
             ),
@@ -665,6 +588,90 @@ class SignupView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LoginView(pendingToken: pendingToken);
+  }
+}
+
+class AuthLoadingView extends StatelessWidget {
+  const AuthLoadingView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const AuthLayout(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TaploeLogo(size: 48, centered: true),
+          SizedBox(height: 64),
+          Text(
+            'Preparando tu perfil',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: TaploeColors.black,
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+              height: 1.1,
+            ),
+          ),
+          SizedBox(height: 42),
+          _AuthLoadingDots(),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthLoadingDots extends StatefulWidget {
+  const _AuthLoadingDots();
+
+  @override
+  State<_AuthLoadingDots> createState() => _AuthLoadingDotsState();
+}
+
+class _AuthLoadingDotsState extends State<_AuthLoadingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (index) {
+            final phase = (controller.value + (index * .18)) % 1;
+            final scale = phase < .5 ? 1 + (phase * .55) : 1.55 - (phase * .55);
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                width: 9,
+                height: 9,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: const BoxDecoration(
+                  color: TaploeColors.black,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
   }
 }
 

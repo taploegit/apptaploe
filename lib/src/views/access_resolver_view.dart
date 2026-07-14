@@ -670,7 +670,7 @@ class _LoadingCard extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -772,7 +772,7 @@ class _Title extends StatelessWidget {
       text,
       style: GoogleFonts.outfit(
         fontSize: context.isMobile ? 30 : 38,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         height: .98,
         color: context.text,
       ),
@@ -817,7 +817,7 @@ class _InlineError extends StatelessWidget {
         message,
         style: GoogleFonts.dmSans(
           color: TaploeColors.error,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -879,7 +879,7 @@ class _InfoTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: context.muted,
             ),
           ),
@@ -890,7 +890,7 @@ class _InfoTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               fontSize: 15,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -954,7 +954,7 @@ class _SelectableProfileTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                       color: context.text,
                     ),
                   ),

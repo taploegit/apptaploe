@@ -31,35 +31,35 @@ ThemeData taploeTheme() {
     ),
     textTheme: dmSans.copyWith(
       displayLarge: GoogleFonts.outfit(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
         height: .96,
       ),
       displayMedium: GoogleFonts.outfit(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
         height: .98,
       ),
       headlineLarge: GoogleFonts.outfit(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
         height: 1,
       ),
       headlineMedium: GoogleFonts.outfit(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
       ),
       titleLarge: GoogleFonts.outfit(
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
       ),
       titleMedium: GoogleFonts.dmSans(
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
       ),
@@ -74,7 +74,7 @@ ThemeData taploeTheme() {
         letterSpacing: 0,
       ),
       labelLarge: GoogleFonts.dmSans(
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
       ),
@@ -87,7 +87,7 @@ ThemeData taploeTheme() {
       foregroundColor: TaploeColors.black,
       titleTextStyle: GoogleFonts.outfit(
         fontSize: 20,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
         color: TaploeColors.text,
         letterSpacing: 0,
       ),
@@ -125,7 +125,7 @@ ThemeData taploeTheme() {
       hintStyle: GoogleFonts.dmSans(color: TaploeColors.muted),
       labelStyle: GoogleFonts.dmSans(
         color: TaploeColors.textSecondary,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
@@ -178,7 +178,7 @@ ThemeData taploeTheme() {
       backgroundColor: TaploeColors.black,
       contentTextStyle: GoogleFonts.dmSans(
         color: TaploeColors.white,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),

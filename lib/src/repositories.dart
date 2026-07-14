@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'device_location.dart';
 import 'models.dart';
 import 'utils.dart';
 
@@ -163,6 +164,32 @@ class NotificationRepository {
       debugPrint('[TaploeNotifications] No se pudieron marcar como leídas.');
       safePrintError(error);
     }
+  }
+}
+
+class QuoteRequestRepository {
+  static Future<void> createTeamPlanRequest({
+    required String solutionType,
+    required int approximateQuantity,
+    required String fullName,
+    required String email,
+    String? company,
+    String? phone,
+    String? message,
+  }) async {
+    await _db.from('quote_requests').insert({
+      'solution_type': solutionType,
+      'approximate_quantity': approximateQuantity,
+      'full_name': fullName.trim(),
+      'company': company?.trim().isEmpty == true ? null : company?.trim(),
+      'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
+      'email': email.trim().toLowerCase(),
+      'message': message?.trim().isEmpty == true ? null : message?.trim(),
+      'metadata': {
+        'source': 'dashboard_team_plan',
+        'requested_by_user_id': _db.auth.currentUser?.id,
+      },
+    });
   }
 }
 
@@ -427,6 +454,10 @@ class AuthRepository {
       email: email.trim().toLowerCase(),
       shouldCreateUser: true,
     );
+  }
+
+  static Future<void> signInWithOAuth(OAuthProvider provider) async {
+    await _db.auth.signInWithOAuth(provider, redirectTo: Uri.base.origin);
   }
 
   static Future<AppUserModel> verifyOtp({
@@ -1080,7 +1111,13 @@ class AnalyticsRepository {
           profileId: profileId,
           visitorId: visitorId,
         );
-    await _db.from('analytics_events').insert({
+    final location = await DeviceLocationService.snapshot();
+    final enrichedMetadata = <String, dynamic>{
+      ...?metadata,
+      if (location?.hasLocation == true)
+        'device_location': location!.toMetadata(),
+    };
+    final payload = <String, dynamic>{
       'profile_id': profileId,
       'physical_card_id': physicalCardId,
       'access_point_id': accessPointId,
@@ -1092,9 +1129,17 @@ class AnalyticsRepository {
       'access_channel': channel,
       'visitor_id': visitorId,
       'session_id': visitorId,
-      'metadata': metadata ?? {},
+      if (location?.city?.isNotEmpty == true) 'city': location!.city,
+      if (location?.region?.isNotEmpty == true) 'region': location!.region,
+      if (location?.country?.isNotEmpty == true) 'country': location!.country,
+      if (location?.latitude != null) 'latitude': location!.latitude,
+      if (location?.longitude != null) 'longitude': location!.longitude,
+      if (location?.accuracy != null)
+        'location_accuracy_meters': location!.accuracy,
+      'metadata': enrichedMetadata,
       'occurred_at': nowIso(),
-    });
+    };
+    await _db.from('analytics_events').insert(payload);
   }
 
   static Future<String?> _resolveLeadIdForVisitor({
@@ -1250,16 +1295,19 @@ class AnalyticsRepository {
     String profileId, {
     int limit = 8,
   }) async {
+    final queryLimit = limit < 20 ? 40 : limit * 2;
     final rows = await _db
         .from('analytics_events')
         .select(
-          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,metadata,occurred_at,profile_links(label)',
+          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,city,region,country,metadata,occurred_at,profile_links(label)',
         )
         .eq('profile_id', profileId)
         .order('occurred_at', ascending: false)
-        .limit(limit);
+        .limit(queryLimit);
     return (rows as List)
         .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
+        .take(limit)
         .toList();
   }
 
@@ -1269,12 +1317,15 @@ class AnalyticsRepository {
   }) async {
     final rows = await _db
         .from('analytics_events')
-        .select('id,event_type,access_channel,occurred_at')
+        .select(
+          'id,event_type,access_channel,city,region,country,metadata,occurred_at',
+        )
         .eq('profile_id', profileId)
         .order('occurred_at', ascending: false)
         .limit(limit);
     return (rows as List)
         .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
         .toList();
   }
 
@@ -1285,14 +1336,31 @@ class AnalyticsRepository {
     final rows = await _db
         .from('analytics_events')
         .select(
-          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,metadata,occurred_at,profile_links(label)',
+          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,city,region,country,metadata,occurred_at,profile_links(label)',
         )
         .eq('lead_id', leadId)
         .order('occurred_at', ascending: true)
         .limit(limit);
     return (rows as List)
         .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
         .toList();
+  }
+
+  static bool _isLegacyProfileInstallEvent(String type) {
+    return type ==
+        String.fromCharCodes(const [
+          119,
+          97,
+          108,
+          108,
+          101,
+          116,
+          95,
+          97,
+          100,
+          100,
+        ]);
   }
 
   static Future<void> attachVisitorEventsToLead({

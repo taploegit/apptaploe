@@ -6,7 +6,7 @@ import 'taploe_colors.dart';
 abstract final class TaploeTypography {
   static TextStyle display(BuildContext context) => GoogleFonts.outfit(
     fontSize: MediaQuery.sizeOf(context).width < 720 ? 40 : 56,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w600,
     height: .98,
     letterSpacing: 0,
     color: TaploeColors.black,
@@ -14,7 +14,7 @@ abstract final class TaploeTypography {
 
   static TextStyle pageTitle(BuildContext context) => GoogleFonts.outfit(
     fontSize: MediaQuery.sizeOf(context).width < 720 ? 34 : 46,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w600,
     height: 1,
     letterSpacing: 0,
     color: TaploeColors.black,
@@ -22,7 +22,7 @@ abstract final class TaploeTypography {
 
   static TextStyle sectionTitle(BuildContext context) => GoogleFonts.outfit(
     fontSize: MediaQuery.sizeOf(context).width < 720 ? 24 : 30,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w600,
     height: 1.08,
     letterSpacing: 0,
     color: TaploeColors.black,
@@ -30,7 +30,7 @@ abstract final class TaploeTypography {
 
   static TextStyle cardTitle(BuildContext context) => GoogleFonts.outfit(
     fontSize: 21,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w600,
     height: 1.12,
     letterSpacing: 0,
     color: TaploeColors.black,
@@ -47,7 +47,7 @@ abstract final class TaploeTypography {
 
   static TextStyle label(BuildContext context) => GoogleFonts.dmSans(
     fontSize: 13,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w600,
     height: 1.2,
     letterSpacing: 0,
     color: TaploeColors.black,

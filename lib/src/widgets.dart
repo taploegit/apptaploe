@@ -53,7 +53,7 @@ class TaploeLogo extends StatelessWidget {
     style: GoogleFonts.outfit(
       fontSize: size,
       height: 1,
-      fontWeight: FontWeight.w900,
+      fontWeight: FontWeight.w600,
       letterSpacing: 0,
       color: color ?? TaploeColors.black,
     ),
@@ -184,7 +184,7 @@ class TaploeButton extends StatelessWidget {
             ),
           ),
           textStyle: WidgetStatePropertyAll(
-            GoogleFonts.dmSans(fontWeight: FontWeight.w800, fontSize: 15),
+            GoogleFonts.dmSans(fontWeight: FontWeight.w600, fontSize: 15),
           ),
         ),
         child: loading
@@ -276,7 +276,7 @@ class TaploeTextField extends StatelessWidget {
           label,
           style: GoogleFonts.dmSans(
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             color: context.text,
           ),
         ),
@@ -370,7 +370,7 @@ class TaploeSectionHeader extends StatelessWidget {
                 title,
                 style: GoogleFonts.outfit(
                   fontSize: 24,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: 0,
                   color: context.text,
                 ),
@@ -419,7 +419,7 @@ class TaploeEmpty extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 21,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -509,7 +509,7 @@ class TaploeModalShell extends StatelessWidget {
                                         : TextAlign.start,
                                     style: GoogleFonts.outfit(
                                       fontSize: context.isMobile ? 28 : 34,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w600,
                                       letterSpacing: 0,
                                       color: context.text,
                                     ),
@@ -597,7 +597,7 @@ class TaploeInfoNote extends StatelessWidget {
             child: Text(
               text,
               style: GoogleFonts.dmSans(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: TaploeColors.textSecondary,
                 height: 1.4,
               ),
@@ -643,7 +643,7 @@ class TaploeToggleRow extends StatelessWidget {
                 Text(
                   title,
                   style: GoogleFonts.dmSans(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     color: context.text,
                   ),
                 ),
@@ -751,7 +751,7 @@ class _StepPill extends StatelessWidget {
             step.label,
             style: GoogleFonts.dmSans(
               fontSize: 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: highlighted ? TaploeColors.text : TaploeColors.muted,
             ),
           ),
@@ -843,7 +843,7 @@ class _TaploeNotificationToast extends StatelessWidget {
                         textAlign: TextAlign.start,
                         style: GoogleFonts.dmSans(
                           color: TaploeColors.black,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                           height: 1.25,
                         ),
                       ),
@@ -949,7 +949,7 @@ class _PageTitle extends StatelessWidget {
           style: GoogleFonts.outfit(
             fontSize: context.isMobile ? 32 : 42,
             height: .95,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
             color: context.text,
             letterSpacing: 0,
           ),

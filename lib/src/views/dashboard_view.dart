@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models.dart';
 import '../profile_public_card.dart';
+import '../pwa_install_panel.dart';
 import '../qr_scanner.dart';
 import '../repositories.dart';
 import '../state.dart';
@@ -52,12 +53,16 @@ enum DashboardSection {
 
 class _DashboardViewState extends State<DashboardView> {
   late DashboardSection section;
+  bool _entryDialogShown = false;
 
   @override
   void initState() {
     super.initState();
     section = widget.initialSection;
     taploeState.addListener(_handleTaploeStateChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowEntryDialog();
+    });
   }
 
   @override
@@ -67,7 +72,22 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _handleTaploeStateChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowEntryDialog();
+    });
+  }
+
+  void _maybeShowEntryDialog() {
+    if (!mounted || _entryDialogShown) return;
+    if (taploeState.bootstrapping || !taploeState.canAccessDashboard) return;
+    _entryDialogShown = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const _DashboardEntryDialog(),
+    );
   }
 
   @override
@@ -177,6 +197,726 @@ class _DashboardViewState extends State<DashboardView> {
   }
 }
 
+enum _EntryDialogPlan { individual, team }
+
+enum _EntryBillingCycle { annual, monthly }
+
+class _DashboardEntryDialog extends StatefulWidget {
+  const _DashboardEntryDialog();
+
+  @override
+  State<_DashboardEntryDialog> createState() => _DashboardEntryDialogState();
+}
+
+class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
+  _EntryDialogPlan? plan;
+  _EntryBillingCycle billingCycle = _EntryBillingCycle.annual;
+  bool checkout = false;
+
+  void _selectPlan(_EntryDialogPlan value) {
+    setState(() {
+      plan = value;
+      billingCycle = _EntryBillingCycle.annual;
+      checkout = false;
+    });
+  }
+
+  void _startTrial() {
+    setState(() {
+      checkout = true;
+    });
+  }
+
+  void _goBack() {
+    if (checkout) {
+      setState(() {
+        checkout = false;
+      });
+      return;
+    }
+    if (plan == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      plan = null;
+      billingCycle = _EntryBillingCycle.annual;
+      checkout = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 760;
+    final content = plan == null
+        ? _EntryDialogChoiceContent(
+            mobile: mobile,
+            onBack: _goBack,
+            onIndividual: () => _selectPlan(_EntryDialogPlan.individual),
+            onTeam: () => _selectPlan(_EntryDialogPlan.team),
+            onUnsure: () => _selectPlan(_EntryDialogPlan.individual),
+          )
+        : checkout
+        ? _EntryDialogCheckoutContent(
+            mobile: mobile,
+            plan: plan!,
+            billingCycle: billingCycle,
+            onBillingCycleChanged: (value) {
+              setState(() {
+                billingCycle = value;
+              });
+            },
+            onBack: _goBack,
+          )
+        : _EntryDialogPlanContent(
+            mobile: mobile,
+            plan: plan!,
+            onBack: _goBack,
+            onStartTrial: _startTrial,
+          );
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: mobile ? 18 : 42,
+        vertical: mobile ? 18 : 36,
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1080, maxHeight: 720),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Material(
+            color: TaploeColors.white,
+            child: mobile
+                ? SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [_EntryDialogVisual(mobile: true), content],
+                    ),
+                  )
+                : Row(
+                    children: [
+                      Expanded(flex: 6, child: content),
+                      const Expanded(flex: 5, child: _EntryDialogVisual()),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EntryDialogChoiceContent extends StatelessWidget {
+  final bool mobile;
+  final VoidCallback onBack;
+  final VoidCallback onIndividual;
+  final VoidCallback onTeam;
+  final VoidCallback onUnsure;
+
+  const _EntryDialogChoiceContent({
+    required this.mobile,
+    required this.onBack,
+    required this.onIndividual,
+    required this.onTeam,
+    required this.onUnsure,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        mobile ? 24 : 44,
+        mobile ? 24 : 34,
+        mobile ? 24 : 44,
+        mobile ? 28 : 34,
+      ),
+      child: Column(
+        mainAxisSize: mobile ? MainAxisSize.min : MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!mobile) const Spacer(),
+          const TaploeLogo(size: 42),
+          SizedBox(height: mobile ? 28 : 34),
+          Text(
+            '¿Qué define mejor cómo usarás Taploe?',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: mobile ? 31 : 34,
+              fontWeight: FontWeight.w600,
+              height: 1.08,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Te mostraremos la opción más útil para empezar.',
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: mobile ? 16 : 17,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          SizedBox(height: mobile ? 28 : 38),
+          _EntryChoiceButton(
+            icon: Icons.person_rounded,
+            label: 'Usar Taploe para mí',
+            onPressed: onIndividual,
+          ),
+          const SizedBox(height: 12),
+          _EntryChoiceButton(
+            icon: Icons.groups_rounded,
+            label: 'Utilizar Taploe para mi equipo',
+            onPressed: onTeam,
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton.icon(
+              onPressed: onUnsure,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text('Aún no estoy seguro'),
+              style: TextButton.styleFrom(
+                foregroundColor: context.text,
+                textStyle: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          if (!mobile) const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryDialogPlanContent extends StatelessWidget {
+  final bool mobile;
+  final _EntryDialogPlan plan;
+  final VoidCallback onBack;
+  final VoidCallback onStartTrial;
+
+  const _EntryDialogPlanContent({
+    required this.mobile,
+    required this.plan,
+    required this.onBack,
+    required this.onStartTrial,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isTeam = plan == _EntryDialogPlan.team;
+    final features = isTeam
+        ? const [
+            (
+              Icons.dashboard_customize_rounded,
+              'Crea plantillas para mantener consistencia en todas las tarjetas.',
+            ),
+            (Icons.contacts_rounded, 'Directorio corporativo compartido.'),
+            (
+              Icons.admin_panel_settings_rounded,
+              'Control administrativo de tarjetas para tu tranquilidad.',
+            ),
+          ]
+        : const [
+            (
+              Icons.badge_rounded,
+              'Crea hasta 5 tarjetas para ti, una para cada ocasión.',
+            ),
+            (
+              Icons.palette_rounded,
+              'Agrega un color personalizado a tus tarjetas.',
+            ),
+            (Icons.qr_code_2_rounded, 'Códigos QR personalizables.'),
+            (
+              Icons.rocket_launch_rounded,
+              'Oculta la marca Taploe al compartir una tarjeta.',
+            ),
+            (Icons.file_download_rounded, 'Exporta tus contactos.'),
+            (Icons.verified_rounded, 'Marca verificada en tu perfil.'),
+          ];
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        mobile ? 24 : 44,
+        mobile ? 24 : 34,
+        mobile ? 24 : 44,
+        mobile ? 28 : 34,
+      ),
+      child: Column(
+        mainAxisSize: mobile ? MainAxisSize.min : MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!mobile)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                tooltip: 'Volver',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded, size: 28),
+              ),
+            ),
+          if (!mobile) const Spacer(),
+          Text(
+            isTeam ? 'Taploe para empresas' : 'Taploe Premium',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: mobile ? 36 : 44,
+              fontWeight: FontWeight.w600,
+              height: 1.02,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isTeam
+                ? 'Herramientas para equipos que necesitan orden, marca y control.'
+                : 'Más personalización para que tu perfil se vea profesional y listo para compartir.',
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: mobile ? 16 : 18,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          SizedBox(height: mobile ? 24 : 28),
+          ...features.map(
+            (feature) => Padding(
+              padding: EdgeInsets.only(bottom: mobile ? 14 : 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(feature.$1, color: TaploeColors.blue, size: 22),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      feature.$2,
+                      style: GoogleFonts.dmSans(
+                        color: context.text,
+                        fontSize: mobile ? 15 : 16,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (!mobile) const Spacer(),
+          TaploeButton(
+            label: 'Iniciar prueba gratis de 7 días',
+            icon: Icons.arrow_forward_rounded,
+            expanded: true,
+            onPressed: onStartTrial,
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'Sin compromiso, cancela cuando quieras.',
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryDialogCheckoutContent extends StatelessWidget {
+  final bool mobile;
+  final _EntryDialogPlan plan;
+  final _EntryBillingCycle billingCycle;
+  final ValueChanged<_EntryBillingCycle> onBillingCycleChanged;
+  final VoidCallback onBack;
+
+  const _EntryDialogCheckoutContent({
+    required this.mobile,
+    required this.plan,
+    required this.billingCycle,
+    required this.onBillingCycleChanged,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isTeam = plan == _EntryDialogPlan.team;
+    const trialDays = 7;
+    final title = isTeam
+        ? 'Prueba Taploe Empresas gratis'
+        : 'Prueba Taploe Premium gratis';
+    final annualSelected = billingCycle == _EntryBillingCycle.annual;
+    const dueDate = '21 de julio de 2026';
+    final amount = isTeam
+        ? annualSelected
+              ? r'$5,389.20 MXN'
+              : r'$899.10 MXN'
+        : annualSelected
+        ? r'$1,583.82 MXN'
+        : r'$179.82 MXN';
+    final annualPrice = isTeam
+        ? r'$1,077.84 MXN por tarjeta * ($89.82 MXN/mes)'
+        : r'$1,583.82 MXN ($131.94 MXN/mes)';
+    final monthlyPrice = isTeam
+        ? r'$179.82 MXN por tarjeta/mes'
+        : r'$179.82 MXN/mes';
+    final badge = isTeam
+        ? 'MEJOR VALOR - AHORRA 28.61%'
+        : 'MEJOR VALOR - AHORRA 27%';
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        mobile ? 24 : 44,
+        mobile ? 24 : 34,
+        mobile ? 24 : 44,
+        mobile ? 28 : 34,
+      ),
+      child: Column(
+        mainAxisSize: mobile ? MainAxisSize.min : MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!mobile)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                tooltip: 'Volver',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded, size: 28),
+              ),
+            ),
+          SizedBox(height: mobile ? 12 : 22),
+          Text(
+            title,
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: mobile ? 34 : 36,
+              fontWeight: FontWeight.w600,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _TrialCheckLine(
+            'Prueba gratis de $trialDays días, cancela cuando quieras.',
+          ),
+          const SizedBox(height: 8),
+          const _TrialCheckLine(
+            'Te recordaremos antes de que termine tu prueba.',
+          ),
+          SizedBox(height: mobile ? 30 : 28),
+          _BillingOption(
+            value: _EntryBillingCycle.annual,
+            groupValue: billingCycle,
+            title: 'Anual',
+            price: annualPrice,
+            badge: badge,
+            onChanged: onBillingCycleChanged,
+          ),
+          const SizedBox(height: 18),
+          _BillingOption(
+            value: _EntryBillingCycle.monthly,
+            groupValue: billingCycle,
+            title: 'Mensual',
+            price: monthlyPrice,
+            onChanged: onBillingCycleChanged,
+          ),
+          SizedBox(height: mobile ? 18 : 10),
+          if (isTeam)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '* 5 tarjetas mínimo',
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          Divider(height: mobile ? 30 : 24, color: TaploeColors.border),
+          _CheckoutRow(label: 'Vence el $dueDate', value: amount),
+          const SizedBox(height: 10),
+          _CheckoutRow(
+            label: 'Vence hoy ($trialDays días gratis)',
+            value: r'$0.00 MXN',
+            highlightLabel: true,
+          ),
+          const SizedBox(height: 18),
+          TaploeButton(
+            label: 'Completar compra',
+            expanded: true,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrialCheckLine extends StatelessWidget {
+  final String label;
+
+  const _TrialCheckLine(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.check_rounded, color: TaploeColors.success, size: 26),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: context.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BillingOption extends StatelessWidget {
+  final _EntryBillingCycle value;
+  final _EntryBillingCycle groupValue;
+  final String title;
+  final String price;
+  final String? badge;
+  final ValueChanged<_EntryBillingCycle> onChanged;
+
+  const _BillingOption({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.price,
+    required this.onChanged,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == groupValue;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? TaploeColors.blue.withValues(alpha: .06)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? TaploeColors.blue : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? TaploeColors.blue : context.muted,
+                size: 28,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.dmSans(
+                            color: context.text,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
+                        if (badge != null)
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFBDEFF2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                badge!,
+                                style: GoogleFonts.dmSans(
+                                  color: const Color(0xFF26747A),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      price,
+                      style: GoogleFonts.dmSans(
+                        color: context.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CheckoutRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool highlightLabel;
+
+  const _CheckoutRow({
+    required this.label,
+    required this.value,
+    this.highlightLabel = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: highlightLabel ? TaploeColors.success : context.muted,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.dmSans(
+            color: context.text,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EntryDialogVisual extends StatelessWidget {
+  final bool mobile;
+
+  const _EntryDialogVisual({this.mobile = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: mobile ? 320 : double.infinity,
+      color: const Color(0xFFF3F4F6),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                mobile ? 34 : 52,
+                mobile ? 34 : 60,
+                mobile ? 34 : 52,
+                mobile ? 34 : 60,
+              ),
+              child: Align(
+                alignment: Alignment.center,
+                child: Image.asset(
+                  'assets/images/perfil-alerta.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.phone_iphone_rounded,
+                    color: TaploeColors.white,
+                    size: 96,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: mobile ? 12 : 22,
+            right: mobile ? 12 : 22,
+            child: IconButton(
+              tooltip: 'Cerrar',
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_rounded),
+              color: TaploeColors.blue,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryChoiceButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _EntryChoiceButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: context.text,
+          side: const BorderSide(color: TaploeColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: GoogleFonts.dmSans(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CardRequiredView extends StatelessWidget {
   final VoidCallback onLinkCard;
 
@@ -227,7 +967,7 @@ class _CardRequiredView extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             color: context.text,
                             fontSize: context.isMobile ? 32 : 42,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             height: 1.05,
                           ),
                         ),
@@ -325,6 +1065,8 @@ class _TopHeader extends StatelessWidget {
                           icon: Icons.error_outline_rounded,
                         ),
                       ),
+                    _HeaderVerifiedBadgeToggle(profile: profile),
+                    const SizedBox(width: 10),
                     _NotificationBell(
                       onOpenLeads: () => onSelected(DashboardSection.leads),
                     ),
@@ -341,6 +1083,16 @@ class _TopHeader extends StatelessWidget {
                     const SizedBox(width: 10),
                     PopupMenuButton<String>(
                       tooltip: 'Cuenta',
+                      offset: const Offset(0, 12),
+                      constraints: const BoxConstraints(minWidth: 220),
+                      color: TaploeColors.white,
+                      surfaceTintColor: TaploeColors.white,
+                      elevation: 10,
+                      shadowColor: TaploeColors.black.withValues(alpha: .12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: const BorderSide(color: TaploeColors.border),
+                      ),
                       onSelected: (value) async {
                         if (value == 'settings') {
                           onSelected(DashboardSection.settings);
@@ -350,11 +1102,17 @@ class _TopHeader extends StatelessWidget {
                       itemBuilder: (context) => const [
                         PopupMenuItem(
                           value: 'settings',
-                          child: Text('Configuración'),
+                          child: _AccountMenuItem(
+                            icon: Icons.settings_outlined,
+                            label: 'Configuración',
+                          ),
                         ),
                         PopupMenuItem(
                           value: 'logout',
-                          child: Text('Cerrar sesión'),
+                          child: _AccountMenuItem(
+                            icon: Icons.logout_rounded,
+                            label: 'Cerrar sesión',
+                          ),
                         ),
                       ],
                       child: CircleAvatar(
@@ -371,6 +1129,128 @@ class _TopHeader extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderVerifiedBadgeToggle extends StatefulWidget {
+  final DigitalProfileModel? profile;
+
+  const _HeaderVerifiedBadgeToggle({required this.profile});
+
+  @override
+  State<_HeaderVerifiedBadgeToggle> createState() =>
+      _HeaderVerifiedBadgeToggleState();
+}
+
+class _HeaderVerifiedBadgeToggleState
+    extends State<_HeaderVerifiedBadgeToggle> {
+  bool saving = false;
+
+  Future<void> toggle(bool value) async {
+    final profile = widget.profile;
+    if (profile == null || saving) return;
+    setState(() => saving = true);
+    final updated = profile.copyWith(showVerifiedBadge: value);
+    taploeState.updateActiveProfile(updated);
+    try {
+      await ProfileRepository.updateProfile(updated);
+      await taploeState.refreshProfiles();
+      if (mounted) {
+        taploeToast(
+          context,
+          value
+              ? 'Marca verificada activada.'
+              : 'Marca verificada desactivada.',
+        );
+      }
+    } catch (e) {
+      safePrintError(e);
+      taploeState.updateActiveProfile(profile);
+      if (mounted) {
+        taploeToast(
+          context,
+          'No pudimos actualizar el verificado.',
+          error: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profile;
+    final active = profile?.showVerifiedBadge ?? false;
+    return Opacity(
+      opacity: profile == null || saving ? .55 : 1,
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.only(left: 14, right: 8),
+        decoration: BoxDecoration(
+          color: TaploeColors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? TaploeColors.blueBorder : TaploeColors.borderStrong,
+            width: active ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.verified_rounded,
+              color: TaploeColors.blue,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Verificado',
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Switch(
+              value: active,
+              onChanged: profile == null ? null : toggle,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _AccountMenuItem({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: TaploeColors.textSecondary),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.black,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -436,6 +1316,14 @@ class _NotificationBellState extends State<_NotificationBell> {
       tooltip: 'Notificaciones',
       offset: const Offset(0, 12),
       constraints: const BoxConstraints(minWidth: 360, maxWidth: 390),
+      color: TaploeColors.white,
+      surfaceTintColor: TaploeColors.white,
+      elevation: 12,
+      shadowColor: TaploeColors.black.withValues(alpha: .14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: TaploeColors.border),
+      ),
       onOpened: _load,
       onSelected: (value) async {
         if (value == 'mark_all') {
@@ -454,6 +1342,7 @@ class _NotificationBellState extends State<_NotificationBell> {
       itemBuilder: (context) => [
         PopupMenuItem<String>(
           enabled: false,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
           child: _NotificationsHeader(
             unreadCount: unreadCount,
             onMarkAllRead: unreadCount == 0
@@ -466,6 +1355,7 @@ class _NotificationBellState extends State<_NotificationBell> {
         if (loading)
           const PopupMenuItem<String>(
             enabled: false,
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 18),
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 18),
               child: Center(child: CircularProgressIndicator()),
@@ -474,12 +1364,14 @@ class _NotificationBellState extends State<_NotificationBell> {
         else if (notifications.isEmpty)
           const PopupMenuItem<String>(
             enabled: false,
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: _EmptyNotifications(),
           )
         else
           ...notifications.map(
             (notification) => PopupMenuItem<String>(
               value: notification.id,
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
               child: _NotificationTile(notification: notification),
             ),
           ),
@@ -524,7 +1416,7 @@ class _NotificationBellState extends State<_NotificationBell> {
                     style: GoogleFonts.dmSans(
                       color: TaploeColors.white,
                       fontSize: 10,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                       height: 1,
                     ),
                   ),
@@ -561,7 +1453,7 @@ class _NotificationsHeader extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     color: context.text,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
@@ -571,7 +1463,7 @@ class _NotificationsHeader extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -621,7 +1513,7 @@ class _NotificationTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.dmSans(
                           color: context.text,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -644,7 +1536,7 @@ class _NotificationTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     height: 1.25,
                   ),
                 ),
@@ -654,7 +1546,7 @@ class _NotificationTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -687,7 +1579,7 @@ class _EmptyNotifications extends StatelessWidget {
               'Sin notificaciones recientes',
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 4),
@@ -697,7 +1589,7 @@ class _EmptyNotifications extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 color: context.muted,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -782,7 +1674,7 @@ class _Sidebar extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
                         ),
@@ -809,7 +1701,7 @@ class _Sidebar extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 11,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -848,7 +1740,7 @@ class _Sidebar extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.dmSans(
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w600,
                                   color: active ? Colors.white : context.text,
                                 ),
                               ),
@@ -878,7 +1770,7 @@ class _Sidebar extends StatelessWidget {
                     const SizedBox(width: 10),
                     Text(
                       'Cerrar sesión',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -953,7 +1845,7 @@ class _CreateDropdownButton extends StatelessWidget {
               'Crear',
               style: GoogleFonts.dmSans(
                 color: TaploeColors.white,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
                 fontSize: 15,
               ),
             ),
@@ -1108,7 +2000,7 @@ class _CreateProfileModalState extends State<_CreateProfileModal> {
     return AlertDialog(
       title: Text(
         'Nuevo perfil',
-        style: GoogleFonts.outfit(fontWeight: FontWeight.w900),
+        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
       ),
       content: SizedBox(
         width: 440,
@@ -1448,7 +2340,7 @@ class _CardLinkingIntroCard extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 32,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               height: 1.05,
             ),
           ),
@@ -1491,7 +2383,7 @@ class _CardLinkingIntroCard extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: GoogleFonts.dmSans(
                     color: context.muted,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     height: 1.35,
                   ),
                 ),
@@ -1581,7 +2473,7 @@ class _CardLinkingStatusCard extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 30,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -1630,7 +2522,7 @@ class _CardLinkingSuccessCard extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 32,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -1644,7 +2536,7 @@ class _CardLinkingSuccessCard extends StatelessWidget {
                   text: profileName,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const TextSpan(text: '.'),
@@ -1701,7 +2593,7 @@ class _CardLinkingErrorCard extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 25,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               height: 1.15,
             ),
           ),
@@ -1846,7 +2738,7 @@ class TaploeModalShell extends StatelessWidget {
                               : TextAlign.left,
                           style: GoogleFonts.outfit(
                             fontSize: isCompact ? 26 : 30,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: 0,
                             color: context.text,
                             height: 1.05,
@@ -1947,7 +2839,7 @@ class _LinkTypeGridButton extends StatelessWidget {
                     style: GoogleFonts.dmSans(
                       color: context.text,
                       fontSize: 12,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -2003,7 +2895,7 @@ class TaploePrimaryButton extends StatelessWidget {
           ),
           textStyle: GoogleFonts.dmSans(
             fontSize: 16,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -2041,7 +2933,7 @@ class TaploeOutlineButton extends StatelessWidget {
           ),
           textStyle: GoogleFonts.dmSans(
             fontSize: 14,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -2108,7 +3000,7 @@ class TaploeSelectCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                       color: context.text,
                     ),
                   ),
@@ -2174,7 +3066,7 @@ class TaploeToggleRow extends StatelessWidget {
                   title,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
@@ -2297,7 +3189,7 @@ class _TaploeStep extends StatelessWidget {
           style: GoogleFonts.dmSans(
             color: data.active ? context.text : context.muted,
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -2384,7 +3276,7 @@ class TaploePreviewCard extends StatelessWidget {
                   title,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
@@ -2583,6 +3475,8 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
             )
           : Column(
               children: [
+                PwaInstallPanel(profile: p, compact: false),
+                const SizedBox(height: 16),
                 _HomeMetricsBar(
                   metrics: [
                     _HomeMetricData(
@@ -2686,7 +3580,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                                     'Enlace público',
                                     style: GoogleFonts.outfit(
                                       fontSize: 20,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -2696,7 +3590,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                                     style: GoogleFonts.dmSans(
                                       color: TaploeColors.blue,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
@@ -2737,7 +3631,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
                               '$completion% completo',
                               style: GoogleFonts.outfit(
                                 fontSize: 24,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w600,
                                 color: context.text,
                               ),
                             ),
@@ -2886,7 +3780,7 @@ class _HomeMetricItem extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                   color: context.muted,
                   fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   height: 1.1,
                 ),
               ),
@@ -2899,7 +3793,7 @@ class _HomeMetricItem extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     color: context.text,
                     fontSize: 28,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     height: 1,
                   ),
                 ),
@@ -2962,7 +3856,7 @@ class _QuickActionsPanel extends StatelessWidget {
             'Acciones rápidas',
             style: GoogleFonts.outfit(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -3046,7 +3940,7 @@ class _QuickActionItem extends StatelessWidget {
                     style: GoogleFonts.dmSans(
                       color: context.text,
                       fontSize: 15,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -3056,7 +3950,7 @@ class _QuickActionItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
                       color: context.muted,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       height: 1.18,
                     ),
                   ),
@@ -3078,8 +3972,12 @@ class _HomeActivityPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (events.isNotEmpty) {
-      return Column(children: events.take(5).map(_ActivityTile.new).toList());
+    final visibleEvents = events
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
+        .take(5)
+        .toList();
+    if (visibleEvents.isNotEmpty) {
+      return Column(children: visibleEvents.map(_ActivityTile.new).toList());
     }
 
     return Padding(
@@ -3093,7 +3991,7 @@ class _HomeActivityPanel extends StatelessWidget {
               'Sin actividad reciente.',
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 6),
@@ -3102,7 +4000,7 @@ class _HomeActivityPanel extends StatelessWidget {
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(
                 color: context.muted,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 18),
@@ -3134,7 +4032,7 @@ class _ProPromptPanel extends StatelessWidget {
                 style: GoogleFonts.outfit(
                   color: context.text,
                   fontSize: 20,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 6),
@@ -3142,7 +4040,7 @@ class _ProPromptPanel extends StatelessWidget {
                 'Descubre todas las funciones Pro para potenciar tu perfil.',
                 style: GoogleFonts.dmSans(
                   color: context.muted,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   height: 1.35,
                 ),
               ),
@@ -3271,7 +4169,7 @@ class _PanelHeader extends StatelessWidget {
             title,
             style: GoogleFonts.outfit(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -3280,7 +4178,7 @@ class _PanelHeader extends StatelessWidget {
           Text(
             trailing!,
             style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: context.muted,
             ),
           ),
@@ -3312,7 +4210,7 @@ class _InsightChip extends StatelessWidget {
           Text(
             label,
             style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -3364,7 +4262,7 @@ class _CheckRow extends StatelessWidget {
               label,
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -3395,18 +4293,48 @@ class _ActivityTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(_eventIcon(event.eventType), color: TaploeColors.blue, size: 20),
+          _AnalyticsEventIcon(event: event),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              _activityEventLabel(event),
-              style: GoogleFonts.dmSans(
-                fontWeight: FontWeight.w800,
-                color: context.text,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _activityEventLabel(event),
+                  style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.w600,
+                    color: context.text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: context.muted,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _analyticsLocation(event),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: context.muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             _relativeTime(event.occurredAt),
             style: GoogleFonts.dmSans(color: context.muted, fontSize: 12),
@@ -3451,7 +4379,7 @@ class _RankRow extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 10),
@@ -3460,7 +4388,7 @@ class _RankRow extends StatelessWidget {
           Text(
             '$value',
             style: GoogleFonts.outfit(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -3497,7 +4425,7 @@ class _SmallPill extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: context.muted,
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -3540,7 +4468,7 @@ class _MiniStat extends StatelessWidget {
                 value,
                 style: GoogleFonts.outfit(
                   fontSize: compact ? 22 : 24,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                   color: context.text,
                   height: 1,
                 ),
@@ -3554,7 +4482,7 @@ class _MiniStat extends StatelessWidget {
                   fontSize: compact ? 12 : 14,
                   height: 1.1,
                   color: context.muted,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -3581,7 +4509,7 @@ class _CopyRow extends StatelessWidget {
           label,
           style: GoogleFonts.dmSans(
             color: context.text,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
@@ -3609,7 +4537,7 @@ class _CopyRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
                       color: context.text,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -3661,7 +4589,7 @@ class _ActionCard extends StatelessWidget {
                     Text(
                       title,
                       style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                         color: context.text,
                       ),
                     ),
@@ -3698,7 +4626,7 @@ class _InfoLine extends StatelessWidget {
               label,
               style: GoogleFonts.dmSans(
                 color: context.muted,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -3710,7 +4638,7 @@ class _InfoLine extends StatelessWidget {
               textAlign: TextAlign.right,
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -3787,7 +4715,7 @@ class _ViewsLineChart extends StatelessWidget {
                     GoogleFonts.outfit(
                       color: TaploeColors.blue,
                       fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 )
@@ -3852,6 +4780,22 @@ String _eventLabel(String type) {
   }
 }
 
+bool _isLegacyProfileInstallEvent(String type) {
+  return type ==
+      String.fromCharCodes(const [
+        119,
+        97,
+        108,
+        108,
+        101,
+        116,
+        95,
+        97,
+        100,
+        100,
+      ]);
+}
+
 String _relativeTime(DateTime? date) {
   if (date == null) return '-';
   final diff = DateTime.now().difference(date);
@@ -3911,7 +4855,6 @@ String _leadSourceLabel(String? channel) {
   return switch (channel) {
     'nfc' => 'Llegó desde tarjeta NFC',
     'qr' => 'Llegó desde código QR',
-    'wallet' => 'Llegó desde wallet',
     'manual' => 'Registro manual',
     'direct' || null || '' => 'Llegó desde enlace público',
     _ => 'Llegó desde $channel',
@@ -3922,7 +4865,6 @@ String _shortLeadSourceLabel(String? channel) {
   return switch (channel) {
     'nfc' => 'Tarjeta NFC',
     'qr' => 'Código QR',
-    'wallet' => 'Wallet',
     'manual' => 'Contacto directo',
     'direct' || null || '' => 'Sitio web',
     _ => channel,
@@ -3934,7 +4876,6 @@ IconData _leadSourceIcon(String? channel) {
     'nfc' => Icons.nfc_rounded,
     'qr' => Icons.qr_code_rounded,
     'manual' => Icons.person_outline_rounded,
-    'wallet' => Icons.account_balance_wallet_outlined,
     _ => Icons.language_rounded,
   };
 }
@@ -3959,17 +4900,6 @@ String _numericDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');
   return '$day/$month/${date.year}';
-}
-
-String _leadRangeLabel(List<LeadModel> leads) {
-  if (leads.isEmpty) return 'Sin fechas';
-  final dates = leads
-      .map((lead) => lead.lastSeenAt ?? lead.firstSeenAt)
-      .whereType<DateTime>()
-      .toList();
-  if (dates.isEmpty) return 'Sin fechas';
-  dates.sort();
-  return '${_numericDate(dates.first)} - ${_numericDate(dates.last)}';
 }
 
 Future<void> _showSubmissionInfo(
@@ -4031,14 +4961,14 @@ class _SubmissionInfoDialog extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             color: context.text,
                             fontSize: 24,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
                           'Formulario enviado ${_relativeTime(submission.submittedAt)}',
                           style: GoogleFonts.dmSans(
                             color: context.muted,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -4192,7 +5122,7 @@ class _SubmissionInfoField extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -4200,7 +5130,7 @@ class _SubmissionInfoField extends StatelessWidget {
                   value,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     height: 1.25,
                   ),
                 ),
@@ -4307,7 +5237,7 @@ class _MetricPanel extends StatelessWidget {
               value,
               style: GoogleFonts.outfit(
                 fontSize: 32,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
                 color: context.text,
                 height: 1,
               ),
@@ -4416,7 +5346,7 @@ class _ActiveProfileMenuItem extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: active ? FontWeight.w900 : FontWeight.w800,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w600,
             ),
           ),
         ),
@@ -4490,7 +5420,7 @@ class _ActiveProfileSelectorFace extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 12,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     height: 1,
                   ),
                 ),
@@ -4512,7 +5442,7 @@ class _ActiveProfileSelectorFace extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.dmSans(
                           color: context.text,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           fontSize: sidebar ? 13 : 14,
                           height: 1,
                         ),
@@ -4572,6 +5502,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
   List<SmartFormModel> _forms = [];
   List<ProfileIntegrationModel> _integrations = [];
   bool _hydratingControllers = false;
+  bool showVerifiedBadge = false;
 
   static int _clampStep(int value) {
     if (value < 0) return 0;
@@ -4674,6 +5605,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
       profilePhoto.text = p.profilePhotoUrl ?? '';
       logo.text = p.logoUrl ?? '';
       cover.text = p.coverPhotoUrl ?? '';
+      showVerifiedBadge = p.showVerifiedBadge;
       email.text = p.vcard?.email ?? '';
       phone.text = p.vcard?.mobilePhone ?? p.vcard?.phone ?? '';
       whatsapp.text = p.vcard?.whatsappPhone ?? '';
@@ -4743,6 +5675,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
             : profilePhoto.text.trim(),
         logoUrl: logo.text.trim().isEmpty ? null : logo.text.trim(),
         coverPhotoUrl: cover.text.trim().isEmpty ? null : cover.text.trim(),
+        showVerifiedBadge: showVerifiedBadge,
         vcard: ProfileVcardModel(
           id: p.vcard?.id,
           profileId: p.id,
@@ -4880,6 +5813,7 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
       coverPhotoUrl: cover.text.trim().isEmpty
           ? profile.coverPhotoUrl
           : cover.text.trim(),
+      showVerifiedBadge: showVerifiedBadge,
       vcard: ProfileVcardModel(
         id: profile.vcard?.id,
         profileId: profile.id,
@@ -5015,6 +5949,9 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
                   profilePhoto: profilePhoto,
                   logo: logo,
                   cover: cover,
+                  showVerifiedBadge: showVerifiedBadge,
+                  onVerifiedBadgeChanged: (value) =>
+                      setState(() => showVerifiedBadge = value),
                   uploadingAsset: uploadingAsset,
                   onUploadProfilePhoto: () =>
                       uploadProfileAsset('profile-photo', profilePhoto),
@@ -5136,7 +6073,7 @@ class _WizardStepTile extends StatelessWidget {
                   '${index + 1}',
                   style: GoogleFonts.dmSans(
                     color: active ? TaploeColors.black : context.muted,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
@@ -5149,7 +6086,7 @@ class _WizardStepTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     color: active ? Colors.white : context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -5170,6 +6107,90 @@ class _WizardStepTile extends StatelessWidget {
   }
 }
 
+class _VerifiedBadgeToggleCard extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _VerifiedBadgeToggleCard({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: value ? TaploeColors.blueBorder : TaploeColors.border,
+          width: value ? 1.6 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.verified_rounded,
+            color: TaploeColors.blue,
+            size: 28,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Verificado',
+                      style: GoogleFonts.outfit(
+                        color: context.text,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: TaploeColors.blue.withValues(alpha: .10),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'Premium',
+                        style: GoogleFonts.dmSans(
+                          color: TaploeColors.blue,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Mostrar marca de verificado junto a tu nombre público.',
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileStepPanel extends StatelessWidget {
   final int step;
   final DigitalProfileModel profile;
@@ -5181,6 +6202,8 @@ class _ProfileStepPanel extends StatelessWidget {
   final TextEditingController profilePhoto;
   final TextEditingController logo;
   final TextEditingController cover;
+  final bool showVerifiedBadge;
+  final ValueChanged<bool> onVerifiedBadgeChanged;
   final String? uploadingAsset;
   final VoidCallback onUploadProfilePhoto;
   final VoidCallback onUploadLogo;
@@ -5212,6 +6235,8 @@ class _ProfileStepPanel extends StatelessWidget {
     required this.profilePhoto,
     required this.logo,
     required this.cover,
+    required this.showVerifiedBadge,
+    required this.onVerifiedBadgeChanged,
     required this.uploadingAsset,
     required this.onUploadProfilePhoto,
     required this.onUploadLogo,
@@ -5255,6 +6280,11 @@ class _ProfileStepPanel extends StatelessWidget {
               controller: displayName,
               hint: 'Daniel Nuño',
               onSubmitted: (_) => save(),
+            ),
+            const SizedBox(height: 14),
+            _VerifiedBadgeToggleCard(
+              value: showVerifiedBadge,
+              onChanged: onVerifiedBadgeChanged,
             ),
             const SizedBox(height: 14),
             TaploeTextField(
@@ -5622,7 +6652,7 @@ class _ProfileStepPanel extends StatelessWidget {
                       'Arrastra para reordenar. Los enlaces destacados se muestran con mayor prioridad en la vista pública.',
                       style: GoogleFonts.dmSans(
                         color: context.muted,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -5635,6 +6665,8 @@ class _ProfileStepPanel extends StatelessWidget {
               profile: profile,
               logo: logo,
               cover: cover,
+              showVerifiedBadge: showVerifiedBadge,
+              onVerifiedBadgeChanged: onVerifiedBadgeChanged,
               uploadingAsset: uploadingAsset,
               onUploadLogo: onUploadLogo,
               onUploadCover: onUploadCover,
@@ -5745,7 +6777,7 @@ class _ContactFieldCard extends StatelessWidget {
                     Text(
                       title,
                       style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                         color: context.text,
                       ),
                     ),
@@ -5792,7 +6824,7 @@ class _ContactFieldCard extends StatelessWidget {
                         visible! ? 'Visible' : 'Oculto',
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           color: visible!
                               ? TaploeColors.success
                               : context.muted,
@@ -5892,7 +6924,7 @@ class _ProfileLinkRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
@@ -5947,7 +6979,7 @@ class _LinkTypeSelector extends StatelessWidget {
         Text(
           'Tipo de enlace',
           style: GoogleFonts.dmSans(
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
             color: context.text,
           ),
         ),
@@ -5981,7 +7013,7 @@ class _LinkTypeSelector extends StatelessWidget {
                           Text(
                             option.label,
                             style: GoogleFonts.dmSans(
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               color: context.text,
                             ),
                           ),
@@ -6041,7 +7073,7 @@ class _LinkPreviewCard extends StatelessWidget {
                 Text(
                   label.trim().isEmpty ? option.label : label.trim(),
                   style: GoogleFonts.dmSans(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     color: context.text,
                   ),
                 ),
@@ -6078,7 +7110,7 @@ class _LinkGlyph extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: size * .72,
               height: 1,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: _linkBrandColor(type),
             ),
           ),
@@ -6093,6 +7125,8 @@ class _DesignStudio extends StatelessWidget {
   final DigitalProfileModel profile;
   final TextEditingController logo;
   final TextEditingController cover;
+  final bool showVerifiedBadge;
+  final ValueChanged<bool> onVerifiedBadgeChanged;
   final String? uploadingAsset;
   final VoidCallback onUploadLogo;
   final VoidCallback onUploadCover;
@@ -6101,6 +7135,8 @@ class _DesignStudio extends StatelessWidget {
     required this.profile,
     required this.logo,
     required this.cover,
+    required this.showVerifiedBadge,
+    required this.onVerifiedBadgeChanged,
     required this.uploadingAsset,
     required this.onUploadLogo,
     required this.onUploadCover,
@@ -6127,7 +7163,7 @@ class _DesignStudio extends StatelessWidget {
                 style: GoogleFonts.outfit(
                   color: context.text,
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -6167,6 +7203,11 @@ class _DesignStudio extends StatelessWidget {
             onTap: onUploadCover,
             wide: true,
           ),
+        ),
+        const SizedBox(height: 22),
+        _VerifiedBadgeToggleCard(
+          value: showVerifiedBadge,
+          onChanged: onVerifiedBadgeChanged,
         ),
         const SizedBox(height: 22),
         const _DesignSectionTitle('Estilos rápidos'),
@@ -6313,7 +7354,7 @@ class _DesignSectionTitle extends StatelessWidget {
           style: GoogleFonts.outfit(
             color: context.text,
             fontSize: 18,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -6358,7 +7399,7 @@ class _DesignPresetCard extends StatelessWidget {
               preset.label,
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
             ),
@@ -6663,7 +7704,7 @@ class _CaptureFormsSection extends StatelessWidget {
           'Formularios de captura',
           style: GoogleFonts.outfit(
             fontSize: 30,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
             color: context.text,
             height: 1,
           ),
@@ -6766,7 +7807,7 @@ class _CaptureFormMetric extends StatelessWidget {
             value,
             style: GoogleFonts.outfit(
               fontSize: 30,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
               height: 1,
             ),
@@ -6776,7 +7817,7 @@ class _CaptureFormMetric extends StatelessWidget {
             label,
             style: GoogleFonts.dmSans(
               color: context.muted,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -6804,7 +7845,7 @@ class _CaptureFormsEmpty extends StatelessWidget {
             'Sin formularios',
             style: GoogleFonts.outfit(
               fontSize: 22,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -6843,7 +7884,7 @@ class _IntegrationsSection extends StatelessWidget {
           'Integraciones',
           style: GoogleFonts.outfit(
             fontSize: 30,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
             color: context.text,
             height: 1,
           ),
@@ -6919,7 +7960,7 @@ class _IntegrationsEmpty extends StatelessWidget {
             'Sin integraciones',
             style: GoogleFonts.outfit(
               fontSize: 22,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -6988,7 +8029,7 @@ class _SegmentControl extends StatelessWidget {
           Text(
             title,
             style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -7029,7 +8070,7 @@ class _SegmentControl extends StatelessWidget {
                         Text(
                           labels[i],
                           style: GoogleFonts.dmSans(
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             color: value == options[i]
                                 ? TaploeColors.blue
                                 : context.text,
@@ -7084,7 +8125,7 @@ class _ColorSwatches extends StatelessWidget {
           Text(
             title,
             style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -7117,7 +8158,7 @@ class _ColorSwatches extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         color: context.text,
                         fontSize: 15,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -7293,7 +8334,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                       style: GoogleFonts.dmSans(
                         color: context.text,
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -7543,17 +8584,37 @@ class _DigitalProfilePhonePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        width: 320,
-        child: TaploePublicProfileCard(
-          profile: profile,
-          links: profile.links,
-          forms: forms,
-          integrations: integrations,
-          framed: true,
-        ),
-      ),
+    const phoneWidth = 390.0;
+    const phoneHeight = 844.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : phoneWidth;
+        final previewWidth = availableWidth < phoneWidth
+            ? availableWidth
+            : phoneWidth;
+        final previewScale = previewWidth / phoneWidth;
+
+        return Center(
+          child: SizedBox(
+            width: previewWidth,
+            height: phoneHeight * previewScale,
+            child: Transform.scale(
+              scale: previewScale,
+              alignment: Alignment.topCenter,
+              child: TaploePublicProfileCard(
+                profile: profile,
+                links: profile.links,
+                forms: forms,
+                integrations: integrations,
+                framed: true,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -7754,7 +8815,7 @@ class _ProfileAssetPicker extends StatelessWidget {
                   label,
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -7961,7 +9022,7 @@ class _ProfileAssetEditorDialogState extends State<_ProfileAssetEditorDialog> {
             'Zoom',
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           Slider(
@@ -7976,7 +9037,7 @@ class _ProfileAssetEditorDialogState extends State<_ProfileAssetEditorDialog> {
             'Posición',
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 10),
@@ -8037,7 +9098,7 @@ class _AlignmentChip extends StatelessWidget {
       selectedColor: TaploeColors.blue.withValues(alpha: .12),
       labelStyle: GoogleFonts.dmSans(
         color: selected ? TaploeColors.blue : context.text,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w600,
       ),
       side: BorderSide(color: selected ? TaploeColors.blue : context.border),
     );
@@ -8821,7 +9882,7 @@ class _LinkEditorModalState extends State<_LinkEditorModal> {
                 'Tipo de enlace',
                 style: GoogleFonts.dmSans(
                   color: context.text,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 10),
@@ -9311,7 +10372,7 @@ class _SuggestedUsePanel extends StatelessWidget {
             'Usos sugeridos',
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 10),
@@ -9361,7 +10422,7 @@ class _FormFieldsSelector extends StatelessWidget {
             'Campos incluidos',
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           Text(
@@ -9390,7 +10451,7 @@ class _FormFieldsSelector extends StatelessWidget {
                 checkmarkColor: TaploeColors.blue,
                 labelStyle: GoogleFonts.dmSans(
                   color: context.text,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
                 side: BorderSide(
                   color: isSelected ? TaploeColors.blue : TaploeColors.border,
@@ -9839,7 +10900,7 @@ class _CardsEmptyActivation extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: context.text,
             ),
           ),
@@ -10092,7 +11153,7 @@ class _PhysicalCardRow extends StatelessWidget {
           style: GoogleFonts.outfit(
             color: context.text,
             fontSize: 22,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 10),
@@ -10102,7 +11163,7 @@ class _PhysicalCardRow extends StatelessWidget {
           'Perfil vinculado',
           style: GoogleFonts.dmSans(
             color: context.muted,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
@@ -10170,7 +11231,7 @@ class _PhysicalCardRow extends StatelessWidget {
                         },
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -10295,7 +11356,7 @@ class _CardStatusPill extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: active ? TaploeColors.success : context.muted,
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -10331,7 +11392,7 @@ class _CardAccessLine extends StatelessWidget {
                 title,
                 style: GoogleFonts.dmSans(
                   color: context.text,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 8),
@@ -10342,7 +11403,7 @@ class _CardAccessLine extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                   color: context.muted,
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -10360,7 +11421,7 @@ class _CardAccessLine extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             textStyle: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
           ),
@@ -10534,7 +11595,7 @@ class _ShareCenterViewState extends State<ShareCenterView> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.dmSans(
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: context.muted,
                                 ),
                               ),
@@ -10611,6 +11672,8 @@ class _ShareCenterViewState extends State<ShareCenterView> {
                             taploeToast(context, 'vCard copiada.');
                           },
                         ),
+                        const SizedBox(height: 14),
+                        PwaInstallPanel(profile: profile, compact: true),
                       ],
                     ),
                   ),
@@ -10805,7 +11868,7 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                                   style: GoogleFonts.outfit(
                                     color: context.text,
                                     fontSize: 24,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -10813,7 +11876,7 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                                 '${d.viewsByDay.fold<int>(0, (a, b) => a + b)} en el rango',
                                 style: GoogleFonts.dmSans(
                                   color: context.muted,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -10842,7 +11905,7 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                                   style: GoogleFonts.outfit(
                                     color: context.text,
                                     fontSize: 22,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -10850,7 +11913,7 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                                 '${d.linkClicks} clicks totales',
                                 style: GoogleFonts.dmSans(
                                   color: context.muted,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -10860,7 +11923,7 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
                             const _MutedText('Sin clicks todavía.')
                           else
                             ...d.clicksByLabel.entries.map(
-                              (e) => _RankRow(
+                              (e) => _ClickedLinkRow(
                                 label: e.key,
                                 value: e.value,
                                 max: d.clicksByLabel.values.fold<int>(
@@ -10913,7 +11976,7 @@ class _AnalyticsHeroCard extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 color: context.muted,
                 fontSize: 17,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const Spacer(),
@@ -10921,8 +11984,8 @@ class _AnalyticsHeroCard extends StatelessWidget {
               '$total',
               style: GoogleFonts.outfit(
                 color: context.text,
-                fontSize: 64,
-                fontWeight: FontWeight.w900,
+                fontSize: 54,
+                fontWeight: FontWeight.w600,
                 height: .9,
               ),
             ),
@@ -10936,7 +11999,7 @@ class _AnalyticsHeroCard extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -10974,7 +12037,7 @@ class _AnalyticsDeltaPill extends StatelessWidget {
             label,
             style: GoogleFonts.dmSans(
               color: TaploeColors.blue,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -11055,7 +12118,7 @@ class _AnalyticsMetricItem extends StatelessWidget {
                 item.label,
                 style: GoogleFonts.dmSans(
                   color: context.muted,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -11066,7 +12129,7 @@ class _AnalyticsMetricItem extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 34,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               height: 1,
             ),
           ),
@@ -11075,7 +12138,7 @@ class _AnalyticsMetricItem extends StatelessWidget {
             '+0.0%',
             style: GoogleFonts.dmSans(
               color: TaploeColors.blue,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -11091,6 +12154,9 @@ class _AnalyticsRecentPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleEvents = events
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
+        .toList();
     return TaploePanel(
       radius: 24,
       child: Column(
@@ -11101,7 +12167,7 @@ class _AnalyticsRecentPanel extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 24,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -11110,14 +12176,14 @@ class _AnalyticsRecentPanel extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: context.muted,
               fontSize: 15,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 24),
-          if (events.isEmpty)
+          if (visibleEvents.isEmpty)
             const _MutedText('Sin actividad reciente.')
           else
-            ...events.map((event) => _AnalyticsRecentTile(event: event)),
+            ...visibleEvents.map((event) => _AnalyticsRecentTile(event: event)),
         ],
       ),
     );
@@ -11140,7 +12206,7 @@ class _AnalyticsRecentTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(_analyticsRecentIcon(event), color: TaploeColors.blue, size: 25),
+          _AnalyticsEventIcon(event: event),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -11157,7 +12223,7 @@ class _AnalyticsRecentTile extends StatelessWidget {
                         style: GoogleFonts.dmSans(
                           color: context.text,
                           fontSize: 16,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -11178,7 +12244,7 @@ class _AnalyticsRecentTile extends StatelessWidget {
                       _analyticsLocation(event),
                       style: GoogleFonts.dmSans(
                         color: context.muted,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     _AnalyticsChannelBadge(event: event),
@@ -11192,7 +12258,7 @@ class _AnalyticsRecentTile extends StatelessWidget {
             _timeOnly(event.occurredAt),
             style: GoogleFonts.dmSans(
               color: context.muted,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -11220,11 +12286,161 @@ class _AnalyticsChannelBadge extends StatelessWidget {
         style: GoogleFonts.dmSans(
           color: TaploeColors.blue,
           fontSize: 12,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
+}
+
+class _AnalyticsEventIcon extends StatelessWidget {
+  final AnalyticsEventModel event;
+
+  const _AnalyticsEventIcon({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    if (event.eventType == 'link_click' ||
+        event.eventType == 'calendar_click') {
+      return _SocialLinkIcon(label: _eventSocialSource(event), size: 25);
+    }
+    return Icon(
+      _analyticsRecentIcon(event),
+      color: TaploeColors.blue,
+      size: 25,
+    );
+  }
+}
+
+class _ClickedLinkRow extends StatelessWidget {
+  final String label;
+  final int value;
+  final int max;
+
+  const _ClickedLinkRow({
+    required this.label,
+    required this.value,
+    required this.max,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = max == 0 ? 0.0 : value / max;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          _SocialLinkIcon(label: label, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 4,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(flex: 5, child: _ProgressBar(value: progress)),
+          const SizedBox(width: 12),
+          Text(
+            '$value',
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialLinkIcon extends StatelessWidget {
+  final String? label;
+  final double size;
+
+  const _SocialLinkIcon({required this.label, this.size = 22});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _socialIconData(label);
+    return SizedBox(
+      width: size + 8,
+      height: size + 8,
+      child: Center(
+        child: FaIcon(data.icon, color: data.color, size: size),
+      ),
+    );
+  }
+}
+
+class _SocialIconData {
+  final FaIconData icon;
+  final Color color;
+
+  const _SocialIconData(this.icon, this.color);
+}
+
+_SocialIconData _socialIconData(String? label) {
+  final normalized = (label ?? '').toLowerCase();
+  if (normalized.contains('whatsapp')) {
+    return const _SocialIconData(FontAwesomeIcons.whatsapp, Color(0xFF25D366));
+  }
+  if (normalized.contains('facebook')) {
+    return const _SocialIconData(FontAwesomeIcons.facebookF, Color(0xFF1877F2));
+  }
+  if (normalized.contains('instagram')) {
+    return const _SocialIconData(FontAwesomeIcons.instagram, Color(0xFFE1306C));
+  }
+  if (normalized.contains('linkedin')) {
+    return const _SocialIconData(
+      FontAwesomeIcons.linkedinIn,
+      Color(0xFF0A66C2),
+    );
+  }
+  if (normalized.contains('tiktok')) {
+    return const _SocialIconData(FontAwesomeIcons.tiktok, TaploeColors.black);
+  }
+  if (normalized.contains('youtube')) {
+    return const _SocialIconData(FontAwesomeIcons.youtube, Color(0xFFFF0000));
+  }
+  if (normalized == 'x' ||
+      normalized.contains('twitter') ||
+      normalized.contains('x.com')) {
+    return const _SocialIconData(FontAwesomeIcons.xTwitter, TaploeColors.black);
+  }
+  if (normalized.contains('mail') || normalized.contains('correo')) {
+    return const _SocialIconData(FontAwesomeIcons.envelope, TaploeColors.blue);
+  }
+  if (normalized.contains('phone') ||
+      normalized.contains('tel') ||
+      normalized.contains('llamar')) {
+    return const _SocialIconData(FontAwesomeIcons.phone, TaploeColors.blue);
+  }
+  if (normalized.contains('calendar') || normalized.contains('agenda')) {
+    return const _SocialIconData(
+      FontAwesomeIcons.calendarDays,
+      TaploeColors.blue,
+    );
+  }
+  if (normalized.contains('map') || normalized.contains('ubic')) {
+    return const _SocialIconData(
+      FontAwesomeIcons.locationDot,
+      TaploeColors.blue,
+    );
+  }
+  return const _SocialIconData(FontAwesomeIcons.globe, TaploeColors.blue);
+}
+
+String? _eventSocialSource(AnalyticsEventModel event) {
+  final metadataLabel = event.metadata['label']?.toString().trim();
+  final type = event.metadata['type']?.toString().trim();
+  final linkLabel = event.linkLabel?.trim();
+  if (metadataLabel?.isNotEmpty == true) return metadataLabel;
+  if (linkLabel?.isNotEmpty == true) return linkLabel;
+  return type;
 }
 
 String _analyticsRecentTitle(AnalyticsEventModel event) {
@@ -11252,15 +12468,24 @@ IconData _analyticsRecentIcon(AnalyticsEventModel event) {
 }
 
 String _analyticsLocation(AnalyticsEventModel event) {
-  final city = event.metadata['city']?.toString().trim();
-  final region = event.metadata['region']?.toString().trim();
-  final country = event.metadata['country']?.toString().trim();
+  final deviceLocation = event.metadata['device_location'];
+  final locationMap = deviceLocation is Map
+      ? Map<String, dynamic>.from(deviceLocation)
+      : const <String, dynamic>{};
+  final city = event.city?.trim().isNotEmpty == true
+      ? event.city!.trim()
+      : event.metadata['city']?.toString().trim() ??
+            locationMap['city']?.toString().trim();
+  final country = event.country?.trim().isNotEmpty == true
+      ? event.country!.trim()
+      : event.metadata['country']?.toString().trim() ??
+            locationMap['country']?.toString().trim();
   final parts = [
     city,
-    region,
     country,
   ].where((part) => part != null && part.isNotEmpty).cast<String>().toList();
-  return parts.isEmpty ? 'Desconocido' : parts.join(', ');
+  if (parts.isNotEmpty) return parts.join(', ');
+  return 'Ubicación no disponible';
 }
 
 class _ViewsBarChart extends StatelessWidget {
@@ -11306,7 +12531,7 @@ class _ViewsBarChart extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: context.muted,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
                 );
               },
@@ -11325,7 +12550,7 @@ class _ViewsBarChart extends StatelessWidget {
                   labels[index],
                   style: GoogleFonts.dmSans(
                     color: context.muted,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 );
               },
@@ -11342,7 +12567,7 @@ class _ViewsBarChart extends StatelessWidget {
                 rod.toY.toInt().toString(),
                 GoogleFonts.outfit(
                   color: TaploeColors.blue,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               );
             },
@@ -11389,6 +12614,7 @@ class _LeadsViewState extends State<LeadsView> {
   String _statusFilter = 'all';
   String _sourceFilter = 'all';
   String _sortMode = 'recent';
+  DateTimeRange? _dateRange;
   bool _listView = true;
 
   @override
@@ -11471,6 +12697,36 @@ class _LeadsViewState extends State<LeadsView> {
     }
   }
 
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange:
+          _dateRange ??
+          DateTimeRange(start: now.subtract(const Duration(days: 6)), end: now),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: TaploeColors.blue,
+              onPrimary: TaploeColors.white,
+              primaryContainer: const Color(0xFFE5E7EB),
+              onPrimaryContainer: TaploeColors.textSecondary,
+              secondary: TaploeColors.blue,
+            ),
+            datePickerTheme: const DatePickerThemeData(
+              rangeSelectionBackgroundColor: Color(0xFFE5E7EB),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && mounted) setState(() => _dateRange = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final byStatus = <String, int>{
@@ -11490,6 +12746,7 @@ class _LeadsViewState extends State<LeadsView> {
           _statusFilter == 'all' || lead.status == _statusFilter;
       final matchesSource =
           _sourceFilter == 'all' || lead.sourceChannel == _sourceFilter;
+      final matchesDate = _leadMatchesDateRange(lead, _dateRange);
       final haystack = [
         lead.displayName,
         lead.company,
@@ -11497,7 +12754,10 @@ class _LeadsViewState extends State<LeadsView> {
         lead.phone,
         _leadSourceLabel(lead.sourceChannel),
       ].where((value) => value?.isNotEmpty == true).join(' ').toLowerCase();
-      return matchesStatus && matchesSource && haystack.contains(query);
+      return matchesStatus &&
+          matchesSource &&
+          matchesDate &&
+          haystack.contains(query);
     }).toList();
     filteredLeads.sort((a, b) {
       final aDate = a.lastSeenAt ?? a.firstSeenAt ?? DateTime(0);
@@ -11546,6 +12806,7 @@ class _LeadsViewState extends State<LeadsView> {
                           onClear: () => setState(() {
                             _statusFilter = 'all';
                             _sourceFilter = 'all';
+                            _dateRange = null;
                             _searchController.clear();
                           }),
                         ),
@@ -11572,7 +12833,9 @@ class _LeadsViewState extends State<LeadsView> {
                               setState(() => _sortMode = value),
                           onViewChanged: (value) =>
                               setState(() => _listView = value),
-                          dateLabel: _leadRangeLabel(filteredLeads),
+                          dateLabel: _dateRangeLabel(_dateRange),
+                          dateActive: _dateRange != null,
+                          onDateTap: _pickDateRange,
                         ),
                         if (!context.isWide) ...[
                           const SizedBox(height: 14),
@@ -11588,6 +12851,7 @@ class _LeadsViewState extends State<LeadsView> {
                             onClear: () => setState(() {
                               _statusFilter = 'all';
                               _sourceFilter = 'all';
+                              _dateRange = null;
                               _searchController.clear();
                             }),
                           ),
@@ -11639,7 +12903,7 @@ class _LeadsSummaryPanel extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: context.muted,
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 12),
@@ -11648,7 +12912,7 @@ class _LeadsSummaryPanel extends StatelessWidget {
             style: GoogleFonts.outfit(
               color: context.text,
               fontSize: 36,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               height: 1,
             ),
           ),
@@ -11657,7 +12921,7 @@ class _LeadsSummaryPanel extends StatelessWidget {
             'Leads totales',
             style: GoogleFonts.dmSans(
               color: context.muted,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 18),
@@ -11707,7 +12971,7 @@ class _LeadSummaryRow extends StatelessWidget {
               label,
               style: GoogleFonts.dmSans(
                 color: context.text,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -11715,7 +12979,7 @@ class _LeadSummaryRow extends StatelessWidget {
             '$value',
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -11753,7 +13017,7 @@ class _LeadsFiltersPanel extends StatelessWidget {
           style: GoogleFonts.outfit(
             color: context.text,
             fontSize: 18,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 18),
@@ -11795,7 +13059,7 @@ class _LeadsFiltersPanel extends StatelessWidget {
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(
               'Limpiar filtros',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -11821,6 +13085,11 @@ class _LeadFilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedValue = items.containsKey(value) ? value : 'all';
+    final selectedLabel = items[selectedValue] ?? '';
+    final icon = label == 'Fuente'
+        ? Icons.hub_outlined
+        : Icons.filter_alt_outlined;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -11829,28 +13098,46 @@ class _LeadFilterDropdown extends StatelessWidget {
           style: GoogleFonts.dmSans(
             color: context.text,
             fontSize: 13,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
         Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: TaploeColors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: TaploeColors.border),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: TaploeColors.blue),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: items.containsKey(value) ? value : 'all',
+              value: selectedValue,
               isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              menuWidth: compactDropdownWidth(context),
+              borderRadius: BorderRadius.circular(18),
+              dropdownColor: TaploeColors.white,
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: TaploeColors.textSecondary,
+              ),
+              selectedItemBuilder: (context) => items.entries
+                  .map(
+                    (_) => _LeadFilterSelectedFace(
+                      icon: icon,
+                      label: selectedLabel,
+                    ),
+                  )
+                  .toList(),
               items: items.entries
                   .map(
                     (entry) => DropdownMenuItem<String>(
                       value: entry.key,
-                      child: Text(entry.value),
+                      child: _LeadFilterMenuItem(
+                        icon: icon,
+                        label: entry.value,
+                        active: entry.key == selectedValue,
+                      ),
                     ),
                   )
                   .toList(),
@@ -11865,6 +13152,83 @@ class _LeadFilterDropdown extends StatelessWidget {
   }
 }
 
+double compactDropdownWidth(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  return width < 520 ? width - 48 : 260;
+}
+
+class _LeadFilterSelectedFace extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _LeadFilterSelectedFace({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: TaploeColors.blue, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.dmSans(
+              color: TaploeColors.black,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeadFilterMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  const _LeadFilterMenuItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, right: 4),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: active ? TaploeColors.blue : TaploeColors.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (active) ...[
+            const SizedBox(width: 10),
+            const Icon(Icons.check_rounded, size: 18, color: TaploeColors.blue),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _LeadsToolbar extends StatelessWidget {
   final TextEditingController controller;
   final int total;
@@ -11872,10 +13236,12 @@ class _LeadsToolbar extends StatelessWidget {
   final String sortMode;
   final bool listView;
   final String dateLabel;
+  final bool dateActive;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onStatusChanged;
   final ValueChanged<String> onSortChanged;
   final ValueChanged<bool> onViewChanged;
+  final VoidCallback onDateTap;
 
   const _LeadsToolbar({
     required this.controller,
@@ -11884,10 +13250,12 @@ class _LeadsToolbar extends StatelessWidget {
     required this.sortMode,
     required this.listView,
     required this.dateLabel,
+    required this.dateActive,
     required this.onSearchChanged,
     required this.onStatusChanged,
     required this.onSortChanged,
     required this.onViewChanged,
+    required this.onDateTap,
   });
 
   @override
@@ -11915,6 +13283,8 @@ class _LeadsToolbar extends StatelessWidget {
             _LeadToolbarPill(
               icon: Icons.calendar_today_rounded,
               label: dateLabel,
+              active: dateActive,
+              onTap: onDateTap,
             ),
             _LeadIconToggle(
               icon: Icons.tune_rounded,
@@ -11937,7 +13307,7 @@ class _LeadsToolbar extends StatelessWidget {
                 'Ordenar por:',
                 style: GoogleFonts.dmSans(
                   color: context.muted,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(width: 8),
@@ -11979,7 +13349,7 @@ class _LeadsToolbar extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 color: context.muted,
                 fontSize: 12,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -11992,35 +13362,70 @@ class _LeadsToolbar extends StatelessWidget {
 class _LeadToolbarPill extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool active;
+  final VoidCallback onTap;
 
-  const _LeadToolbarPill({required this.icon, required this.label});
+  const _LeadToolbarPill({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: TaploeColors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TaploeColors.border),
+    return Material(
+      color: TaploeColors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: active ? TaploeColors.blue : TaploeColors.border,
+          width: active ? 1.6 : 1,
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.dmSans(
-              color: context.text,
-              fontWeight: FontWeight.w900,
-            ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                icon,
+                color: active ? TaploeColors.blue : context.muted,
+                size: 18,
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Icon(icon, color: context.muted, size: 18),
-        ],
+        ),
       ),
     );
   }
+}
+
+bool _leadMatchesDateRange(LeadModel lead, DateTimeRange? range) {
+  if (range == null) return true;
+  final date = lead.lastSeenAt ?? lead.firstSeenAt;
+  if (date == null) return false;
+  final local = DateTime(date.year, date.month, date.day);
+  final start = DateTime(range.start.year, range.start.month, range.start.day);
+  final end = DateTime(range.end.year, range.end.month, range.end.day);
+  return !local.isBefore(start) && !local.isAfter(end);
+}
+
+String _dateRangeLabel(DateTimeRange? range) {
+  if (range == null) return 'Todas las fechas';
+  return '${_numericDate(range.start)} - ${_numericDate(range.end)}';
 }
 
 class _LeadIconToggle extends StatelessWidget {
@@ -12061,46 +13466,46 @@ class _LeadStatusTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const tabs = {'all': 'Todos', 'new': 'Nuevos', 'contacted': 'Contactados'};
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: tabs.entries.map((entry) {
-          final selected = value == entry.key;
-          return Padding(
-            padding: const EdgeInsets.only(right: 22),
-            child: InkWell(
-              onTap: () => onChanged(entry.key),
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      entry.value,
-                      style: GoogleFonts.dmSans(
-                        color: selected ? TaploeColors.blue : context.text,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 9),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      width: selected ? 72 : 0,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: TaploeColors.blue,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ],
+    final tabs = const {
+      'all': 'Todos',
+      'new': 'Nuevos',
+      'contacted': 'Contactados',
+    };
+    return Wrap(
+      spacing: 28,
+      runSpacing: 10,
+      children: tabs.entries.map((entry) {
+        final active = entry.key == value;
+        return InkWell(
+          onTap: () => onChanged(entry.key),
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  entry.value,
+                  style: GoogleFonts.dmSans(
+                    color: active ? TaploeColors.blue : context.text,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 9),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: active ? 58 : 0,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: TaploeColors.blue,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ],
             ),
-          );
-        }).toList(),
-      ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -12187,7 +13592,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                       : '?',
                   style: GoogleFonts.dmSans(
                     color: Colors.white,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -12205,7 +13610,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                           lead.displayName,
                           style: GoogleFonts.outfit(
                             fontSize: 19,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             color: context.text,
                           ),
                         ),
@@ -12230,7 +13635,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                               'Ver info',
                               style: GoogleFonts.dmSans(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -12244,7 +13649,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.dmSans(
                           color: context.text,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     const SizedBox(height: 12),
@@ -12316,7 +13721,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                 lead.lastSeenAt == null ? '-' : _numericDate(lead.lastSeenAt!),
                 style: GoogleFonts.dmSans(
                   color: context.text,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 14),
@@ -12336,7 +13741,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
                         color: context.muted,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -12367,7 +13772,7 @@ class _LeadTimelineTileState extends State<_LeadTimelineTile> {
                     icon: const Icon(Icons.mail_rounded, size: 18),
                     label: Text(
                       lead.status == 'contacted' ? 'Contactado' : 'Contactar',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                     ),
                   ),
                   PopupMenuButton<String>(
@@ -12434,7 +13839,7 @@ class _LeadStatusBadge extends StatelessWidget {
         style: GoogleFonts.dmSans(
           color: color,
           fontSize: 12,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -12461,7 +13866,7 @@ class _LeadContactLine extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               color: context.muted,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -12527,7 +13932,7 @@ class _LeadTimelineRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: context.muted,
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -12541,7 +13946,7 @@ class _LeadTimelineRow extends StatelessWidget {
                 _timelineEventLabel(event),
                 style: GoogleFonts.dmSans(
                   color: context.text,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               if (event.eventType == 'form_submit' &&
@@ -12560,11 +13965,336 @@ class _LeadTimelineRow extends StatelessWidget {
           style: GoogleFonts.dmSans(
             color: context.muted,
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(width: 6),
         Icon(_timelineIcon(event), color: TaploeColors.blue, size: 15),
+      ],
+    );
+  }
+}
+
+class _TeamPlanRequestPanel extends StatelessWidget {
+  final String title;
+  final String message;
+
+  const _TeamPlanRequestPanel({
+    this.title = 'Crea un espacio para tu equipo',
+    this.message =
+        'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business. Para activar esta experiencia necesitas solicitar una cotización con el equipo de Taploe.',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      radius: 24,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.groups_2_outlined,
+            color: TaploeColors.blue,
+            size: 42,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 28,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 16,
+                height: 1.45,
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          TaploeButton(
+            label: 'Solicitar plan para equipo',
+            icon: Icons.workspace_premium_outlined,
+            width: 260,
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _TeamPlanRequestDialog(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamPlanRequestDialog extends StatefulWidget {
+  const _TeamPlanRequestDialog();
+
+  @override
+  State<_TeamPlanRequestDialog> createState() => _TeamPlanRequestDialogState();
+}
+
+class _TeamPlanRequestDialogState extends State<_TeamPlanRequestDialog> {
+  final fullName = TextEditingController();
+  final company = TextEditingController();
+  final phone = TextEditingController();
+  final email = TextEditingController();
+  final quantity = TextEditingController(text: '1');
+  final message = TextEditingController();
+  String solutionType = 'nfc_card';
+  bool saving = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = taploeState.currentUser;
+    fullName.text = user?.fullName ?? '';
+    email.text = user?.email ?? '';
+    phone.text = user?.phone ?? '';
+    company.text = taploeState.organization?.name ?? '';
+  }
+
+  @override
+  void dispose() {
+    fullName.dispose();
+    company.dispose();
+    phone.dispose();
+    email.dispose();
+    quantity.dispose();
+    message.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    final qty = int.tryParse(quantity.text.trim()) ?? 0;
+    if (fullName.text.trim().isEmpty || email.text.trim().isEmpty || qty <= 0) {
+      setState(() {
+        error = 'Completa nombre, correo electrónico y cantidad aproximada.';
+      });
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      await QuoteRequestRepository.createTeamPlanRequest(
+        solutionType: solutionType,
+        approximateQuantity: qty,
+        fullName: fullName.text,
+        company: company.text,
+        phone: phone.text,
+        email: email.text,
+        message: message.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      taploeToast(context, 'Solicitud enviada. Te contactaremos pronto.');
+    } catch (e) {
+      safePrintError(e);
+      if (mounted) {
+        setState(() {
+          error =
+              'No pudimos enviar la solicitud. Revisa permisos de quote_requests.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.workspace_premium_outlined,
+                      color: TaploeColors.blue,
+                      size: 30,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Solicitar plan para equipo',
+                        style: GoogleFonts.outfit(
+                          color: context.text,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: saving ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Cuéntanos qué necesita tu equipo y Taploe te ayuda con una cotización.',
+                  style: GoogleFonts.dmSans(color: context.muted),
+                ),
+                const SizedBox(height: 22),
+                if (error != null) ...[
+                  Text(
+                    error!,
+                    style: GoogleFonts.dmSans(
+                      color: TaploeColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _ResponsivePair(
+                  breakpoint: 720,
+                  left: _TeamSolutionDropdown(
+                    value: solutionType,
+                    onChanged: (value) => setState(() => solutionType = value),
+                  ),
+                  right: TaploeTextField(
+                    label: 'Cantidad aproximada *',
+                    controller: quantity,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ResponsivePair(
+                  breakpoint: 720,
+                  left: TaploeTextField(
+                    label: 'Nombre completo *',
+                    controller: fullName,
+                  ),
+                  right: TaploeTextField(
+                    label: 'Empresa opcional',
+                    controller: company,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ResponsivePair(
+                  breakpoint: 720,
+                  left: TaploeTextField(
+                    label: 'Teléfono opcional',
+                    controller: phone,
+                    keyboardType: TextInputType.phone,
+                  ),
+                  right: TaploeTextField(
+                    label: 'Correo electrónico *',
+                    controller: email,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TaploeTextField(
+                  label: 'Cuéntanos brevemente qué tienes en mente opcional',
+                  hint:
+                      'Ejemplo: Necesitamos 15 tarjetas para el equipo comercial, personalizadas con el logo y los datos de cada asesor.',
+                  controller: message,
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TaploeButton(
+                      label: 'Cancelar',
+                      kind: TaploeButtonKind.secondary,
+                      width: 120,
+                      onPressed: saving ? null : () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 12),
+                    TaploeButton(
+                      label: 'Enviar solicitud',
+                      icon: Icons.send_rounded,
+                      width: 180,
+                      loading: saving,
+                      onPressed: submit,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamSolutionDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _TeamSolutionDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const items = {
+      'nfc_card': 'Tarjeta NFC + perfil digital',
+      'digital_profile': 'Solo perfil digital',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tipo de solución *',
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 54,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: TaploeColors.white,
+            borderRadius: BorderRadius.circular(TaploeRadius.input),
+            border: Border.all(color: TaploeColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              borderRadius: BorderRadius.circular(16),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              items: items.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (next) {
+                if (next != null) onChanged(next);
+              },
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -12634,14 +14364,12 @@ class _TeamViewState extends State<TeamView> {
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : taploeState.organization == null
-          ? const TaploeEmpty(
-              title: 'Sin organización',
-              message: 'Esta cuenta todavía no está conectada a un equipo.',
-            )
+          ? const _TeamPlanRequestPanel()
           : members.isEmpty
-          ? const TaploeEmpty(
-              title: 'Sin miembros',
-              message: 'Agrega miembros a la organización.',
+          ? const _TeamPlanRequestPanel(
+              title: 'Crea un espacio para tu equipo',
+              message:
+                  'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business.',
             )
           : Column(
               children: [
@@ -12717,7 +14445,7 @@ class _TeamViewState extends State<TeamView> {
                                         m.name,
                                         style: GoogleFonts.outfit(
                                           fontSize: 20,
-                                          fontWeight: FontWeight.w900,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                       Text(
@@ -12847,65 +14575,7 @@ class _AdminViewState extends State<AdminView> {
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : org == null
-          ? TaploePanel(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.business_rounded,
-                    color: TaploeColors.blue,
-                    size: 36,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Crea un espacio para tu equipo',
-                    style: GoogleFonts.outfit(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.dmSans(color: context.muted),
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      TaploeButton(
-                        label: 'Solicitar plan para equipo',
-                        icon: Icons.workspace_premium_outlined,
-                        onPressed: () => taploeToast(
-                          context,
-                          'El flujo de plan de equipo quedará conectado a ventas.',
-                        ),
-                      ),
-                      TaploeButton(
-                        label: 'Ver perfil público',
-                        icon: Icons.open_in_new_rounded,
-                        kind: TaploeButtonKind.secondary,
-                        onPressed: taploeState.activeProfile == null
-                            ? null
-                            : () {
-                                Clipboard.setData(
-                                  ClipboardData(
-                                    text: TaploeConfig.profileUrl(
-                                      taploeState.activeProfile!.publicSlug,
-                                    ),
-                                  ),
-                                );
-                                taploeToast(context, 'Enlace copiado.');
-                              },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            )
+          ? const _TeamPlanRequestPanel()
           : Column(
               children: [
                 TaploePanel(
@@ -12940,7 +14610,7 @@ class _AdminViewState extends State<AdminView> {
                               org.name,
                               style: GoogleFonts.outfit(
                                 fontSize: 24,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(

@@ -193,7 +193,7 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
                   style: GoogleFonts.dmSans(
                     color: context.text,
                     fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -241,7 +241,7 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
                             style: GoogleFonts.dmSans(
                               color: context.muted,
                               height: 1.4,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -326,7 +326,7 @@ class TaploeQrScannerButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(999),
           ),
-          textStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
+          textStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
         ),
       ),
     );
