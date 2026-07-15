@@ -221,7 +221,9 @@ enum _EntryDialogPlan { individual, team }
 enum _EntryBillingCycle { annual, monthly }
 
 class _DashboardEntryDialog extends StatefulWidget {
-  const _DashboardEntryDialog();
+  final bool initialShowPlanComparison;
+
+  const _DashboardEntryDialog({this.initialShowPlanComparison = true});
 
   @override
   State<_DashboardEntryDialog> createState() => _DashboardEntryDialogState();
@@ -231,8 +233,14 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
   _EntryDialogPlan? plan;
   _EntryDialogPlan? comparisonCheckoutPlan;
   _EntryBillingCycle billingCycle = _EntryBillingCycle.annual;
-  bool showPlanComparison = true;
+  late bool showPlanComparison;
   bool checkout = false;
+
+  @override
+  void initState() {
+    super.initState();
+    showPlanComparison = widget.initialShowPlanComparison;
+  }
 
   void _selectPlan(_EntryDialogPlan value) {
     setState(() {
@@ -309,6 +317,12 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
               billingCycle = _EntryBillingCycle.annual;
             });
           },
+          onProposal: () {
+            showDialog<void>(
+              context: context,
+              builder: (context) => const _TeamPlanRequestDialog(),
+            );
+          },
         ),
       );
     }
@@ -319,7 +333,13 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
             onBack: _goBack,
             onIndividual: () => _selectPlan(_EntryDialogPlan.individual),
             onTeam: () => _selectPlan(_EntryDialogPlan.team),
-            onUnsure: () => _selectPlan(_EntryDialogPlan.individual),
+            onEnterprise: () {
+              showDialog<void>(
+                context: context,
+                builder: (context) => const _TeamPlanRequestDialog(),
+              );
+            },
+            onUnsure: () => Navigator.of(context).pop(),
           )
         : checkout
         ? _EntryDialogCheckoutContent(
@@ -378,6 +398,7 @@ class _EntryPlanComparisonView extends StatelessWidget {
   final VoidCallback onFree;
   final VoidCallback onPremium;
   final VoidCallback onTeam;
+  final VoidCallback onProposal;
 
   const _EntryPlanComparisonView({
     required this.mobile,
@@ -385,26 +406,13 @@ class _EntryPlanComparisonView extends StatelessWidget {
     required this.onFree,
     required this.onPremium,
     required this.onTeam,
+    required this.onProposal,
   });
 
   @override
   Widget build(BuildContext context) {
     final horizontal = mobile ? 20.0 : 52.0;
     final cards = [
-      _PlanComparisonCard(
-        title: 'Gratis',
-        subtitle: 'Empieza a compartir tu perfil digital.',
-        price: r'$0',
-        cadence: '/mes',
-        buttonLabel: 'Continuar gratis',
-        onPressed: onFree,
-        features: const [
-          (Icons.person_rounded, '1 perfil digital'),
-          (Icons.link_rounded, 'Enlaces básicos'),
-          (Icons.qr_code_2_rounded, 'QR público incluido'),
-          (Icons.share_rounded, 'Compartir perfil'),
-        ],
-      ),
       _PlanComparisonCard(
         title: 'Taploe Premium',
         subtitle: 'Más personalización y herramientas para vender mejor.',
@@ -439,7 +447,25 @@ class _EntryPlanComparisonView extends StatelessWidget {
           (Icons.file_download_rounded, 'Exportación de contactos'),
         ],
       ),
+      _PlanComparisonCard(
+        title: 'Agency or Enterprise',
+        subtitle:
+            'Get team seats, SSO, dedicated support, and custom contracts.',
+        price: 'A medida',
+        cadence: '',
+        note: 'Solución personalizada para equipos grandes.',
+        buttonLabel: 'Solicitar propuesta',
+        buttonIcon: Icons.description_outlined,
+        onPressed: onProposal,
+        features: const [
+          (Icons.groups_2_rounded, 'Asientos para equipos'),
+          (Icons.security_rounded, 'SSO y seguridad avanzada'),
+          (Icons.support_agent_rounded, 'Soporte dedicado'),
+          (Icons.article_rounded, 'Contratos personalizados'),
+        ],
+      ),
     ];
+    final freeCard = _FreePlanWideCard(onPressed: onFree);
 
     return SafeArea(
       child: Stack(
@@ -505,20 +531,28 @@ class _EntryPlanComparisonView extends StatelessWidget {
                                 card,
                                 const SizedBox(height: 16),
                               ],
+                              freeCard,
                             ],
                           )
-                        : SizedBox(
-                            height: 496,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (var i = 0; i < cards.length; i++) ...[
-                                  Expanded(child: cards[i]),
-                                  if (i != cards.length - 1)
-                                    const SizedBox(width: 22),
-                                ],
-                              ],
-                            ),
+                        : Column(
+                            children: [
+                              SizedBox(
+                                height: 496,
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    for (var i = 0; i < cards.length; i++) ...[
+                                      Expanded(child: cards[i]),
+                                      if (i != cards.length - 1)
+                                        const SizedBox(width: 22),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              freeCard,
+                            ],
                           ),
                     SizedBox(height: mobile ? 12 : 24),
                     const _PlanTrustBar(),
@@ -650,6 +684,7 @@ class _PlanComparisonCard extends StatelessWidget {
   final String? note;
   final bool highlighted;
   final String buttonLabel;
+  final IconData? buttonIcon;
   final VoidCallback onPressed;
   final List<(IconData, String)> features;
 
@@ -661,6 +696,7 @@ class _PlanComparisonCard extends StatelessWidget {
     required this.buttonLabel,
     required this.onPressed,
     required this.features,
+    this.buttonIcon,
     this.badge,
     this.note,
     this.highlighted = false,
@@ -777,9 +813,11 @@ class _PlanComparisonCard extends StatelessWidget {
             const SizedBox(height: 18),
             TaploeButton(
               label: buttonLabel,
-              icon: highlighted
-                  ? Icons.arrow_forward_rounded
-                  : Icons.check_rounded,
+              icon:
+                  buttonIcon ??
+                  (highlighted
+                      ? Icons.arrow_forward_rounded
+                      : Icons.check_rounded),
               kind: highlighted
                   ? TaploeButtonKind.primary
                   : TaploeButtonKind.secondary,
@@ -825,11 +863,156 @@ class _PlanComparisonCard extends StatelessWidget {
   }
 }
 
+class _FreePlanWideCard extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _FreePlanWideCard({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 760;
+    final features = const [
+      '1 perfil digital',
+      'Enlaces básicos',
+      'QR público incluido',
+      'Compartir perfil',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(mobile ? 22 : 28),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: mobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FreePlanHeader(onPressed: onPressed, mobile: true),
+                const SizedBox(height: 18),
+                _FreePlanFeatures(features: features),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gratis',
+                        style: GoogleFonts.outfit(
+                          color: context.text,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      _FreePlanFeatures(features: features),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                TaploeButton(
+                  label: 'Continuar gratis',
+                  icon: Icons.check_rounded,
+                  kind: TaploeButtonKind.secondary,
+                  width: 220,
+                  onPressed: onPressed,
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _FreePlanHeader extends StatelessWidget {
+  final VoidCallback onPressed;
+  final bool mobile;
+
+  const _FreePlanHeader({required this.onPressed, required this.mobile});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gratis',
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: mobile ? 30 : 34,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 16),
+        TaploeButton(
+          label: 'Continuar gratis',
+          icon: Icons.check_rounded,
+          kind: TaploeButtonKind.secondary,
+          expanded: true,
+          onPressed: onPressed,
+        ),
+      ],
+    );
+  }
+}
+
+class _FreePlanFeatures extends StatelessWidget {
+  final List<String> features;
+
+  const _FreePlanFeatures({required this.features});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 22,
+      runSpacing: 12,
+      children: [
+        for (final feature in features)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE9ECEF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Color(0xFF363A43),
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                feature,
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
 class _EntryDialogChoiceContent extends StatelessWidget {
   final bool mobile;
   final VoidCallback onBack;
   final VoidCallback onIndividual;
   final VoidCallback onTeam;
+  final VoidCallback onEnterprise;
   final VoidCallback onUnsure;
 
   const _EntryDialogChoiceContent({
@@ -837,6 +1020,7 @@ class _EntryDialogChoiceContent extends StatelessWidget {
     required this.onBack,
     required this.onIndividual,
     required this.onTeam,
+    required this.onEnterprise,
     required this.onUnsure,
   });
 
@@ -886,6 +1070,13 @@ class _EntryDialogChoiceContent extends StatelessWidget {
             icon: Icons.groups_rounded,
             label: 'Utilizar Taploe para mi equipo',
             onPressed: onTeam,
+          ),
+          const SizedBox(height: 12),
+          _EntryChoiceButton(
+            icon: Icons.business_center_rounded,
+            label: 'Enterprise',
+            dark: true,
+            onPressed: onEnterprise,
           ),
           const SizedBox(height: 16),
           Center(
@@ -1426,12 +1617,14 @@ class _EntryDialogVisual extends StatelessWidget {
 class _EntryChoiceButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool dark;
   final VoidCallback onPressed;
 
   const _EntryChoiceButton({
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.dark = false,
   });
 
   @override
@@ -1444,8 +1637,9 @@ class _EntryChoiceButton extends StatelessWidget {
         icon: Icon(icon, size: 20),
         label: Text(label),
         style: OutlinedButton.styleFrom(
-          foregroundColor: context.text,
-          side: const BorderSide(color: TaploeColors.border),
+          backgroundColor: dark ? context.text : TaploeColors.white,
+          foregroundColor: dark ? TaploeColors.white : context.text,
+          side: BorderSide(color: dark ? context.text : TaploeColors.border),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: GoogleFonts.dmSans(
             fontSize: 16,
@@ -2607,6 +2801,12 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(height: 10),
                 ...items.map((item) {
                   final active = selected == item.$1;
+                  final showPremiumCrown = {
+                    DashboardSection.analytics,
+                    DashboardSection.leads,
+                    DashboardSection.team,
+                    DashboardSection.admin,
+                  }.contains(item.$1);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: InkWell(
@@ -2645,6 +2845,14 @@ class _Sidebar extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (showPremiumCrown) ...[
+                              const SizedBox(width: 8),
+                              const FaIcon(
+                                FontAwesomeIcons.crown,
+                                color: Color(0xFF9CA3AF),
+                                size: 14,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2662,7 +2870,9 @@ class _Sidebar extends StatelessWidget {
                 showDialog<void>(
                   context: context,
                   barrierDismissible: true,
-                  builder: (context) => const _DashboardEntryDialog(),
+                  builder: (context) => const _DashboardEntryDialog(
+                    initialShowPlanComparison: false,
+                  ),
                 );
               },
               child: Container(
@@ -2742,7 +2952,7 @@ class _CreateDropdownButton extends StatelessWidget {
             children: [
               Icon(Icons.add_card_rounded, size: 20),
               SizedBox(width: 10),
-              Text('Agregar tarjeta'),
+              Text('Vincular tarjeta'),
             ],
           ),
         ),
@@ -7743,7 +7953,7 @@ class _ContactFieldCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
         color: TaploeColors.white,
         borderRadius: BorderRadius.circular(18),
@@ -8253,48 +8463,48 @@ class _DesignStudio extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _ResponsivePair(
-          left: _SegmentControl(
-            title: 'Estilo de botones',
-            value: theme.buttonStyle,
-            options: const ['pill', 'rounded', 'square'],
-            labels: const ['Redondeado', 'Suave', 'Cuadrado'],
-            onChanged: (value) =>
-                _saveThemeQuick(profile, theme.copyWithButtonStyle(value)),
-          ),
-          right: _SegmentControl(
-            title: 'Tipografía',
-            value: theme.fontFamily,
-            options: const ['system', 'poppins', 'montserrat'],
-            labels: const ['Inter', 'Poppins', 'Montserrat'],
-            onChanged: (value) =>
-                _saveThemeQuick(profile, theme.copyWithFontFamily(value)),
-          ),
+        _DesignOptionsGrid(
+          children: [
+            _SegmentControl(
+              title: 'Estilo de botones',
+              value: theme.buttonStyle,
+              options: const ['pill', 'rounded', 'square'],
+              labels: const ['Redondeado', 'Suave', 'Cuadrado'],
+              onChanged: (value) =>
+                  _saveThemeQuick(profile, theme.copyWithButtonStyle(value)),
+            ),
+            _SegmentControl(
+              title: 'Tipografía',
+              value: theme.fontFamily,
+              options: const ['system', 'poppins', 'montserrat'],
+              labels: const ['Inter', 'Poppins', 'Montserrat'],
+              onChanged: (value) =>
+                  _saveThemeQuick(profile, theme.copyWithFontFamily(value)),
+            ),
+            _SegmentControl(
+              title: 'Fondo',
+              value: _backgroundMode(theme),
+              options: const ['light', 'dark'],
+              labels: const ['Claro', 'Oscuro'],
+              onChanged: (value) =>
+                  _saveThemeQuick(profile, theme.copyWithBackgroundMode(value)),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
-        _ResponsivePair(
-          left: _SegmentControl(
-            title: 'Fondo',
-            value: _backgroundMode(theme),
-            options: const ['light', 'dark'],
-            labels: const ['Claro', 'Oscuro'],
-            onChanged: (value) =>
-                _saveThemeQuick(profile, theme.copyWithBackgroundMode(value)),
-          ),
-          right: _ColorSwatches(
-            title: 'Fondo y portada sin imagen',
-            selected: theme.backgroundColorStart,
-            colors: const [
-              '#FFFFFF',
-              '#F8FAFC',
-              '#EEF2FF',
-              '#ECFDF5',
-              '#FFF7ED',
-              '#050505',
-            ],
-            onChanged: (value) =>
-                _saveThemeQuick(profile, theme.copyWithBackgroundColor(value)),
-          ),
+        _ColorSwatches(
+          title: 'Fondo y portada sin imagen',
+          selected: theme.backgroundColorStart,
+          colors: const [
+            '#FFFFFF',
+            '#F8FAFC',
+            '#EEF2FF',
+            '#ECFDF5',
+            '#FFF7ED',
+            '#050505',
+          ],
+          onChanged: (value) =>
+              _saveThemeQuick(profile, theme.copyWithBackgroundColor(value)),
         ),
         const SizedBox(height: 18),
         Wrap(
@@ -8400,6 +8610,37 @@ class _DesignPresetCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DesignOptionsGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _DesignOptionsGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 980
+            ? 3
+            : constraints.maxWidth >= 640
+            ? 2
+            : 1;
+        const gap = 12.0;
+        final itemWidth =
+            (constraints.maxWidth - (gap * (columns - 1))) / columns;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children)
+              SizedBox(width: itemWidth, child: child),
+          ],
+        );
+      },
     );
   }
 }
@@ -9017,6 +9258,7 @@ class _SegmentControl extends StatelessWidget {
           Text(
             title,
             style: GoogleFonts.dmSans(
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: context.text,
             ),
@@ -9031,8 +9273,8 @@ class _SegmentControl extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   onTap: () => onChanged(options[i]),
                   child: Container(
-                    height: 36,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    height: 34,
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
                     decoration: BoxDecoration(
                       color: value == options[i]
                           ? TaploeColors.blue.withValues(alpha: .08)
@@ -9058,6 +9300,7 @@ class _SegmentControl extends StatelessWidget {
                         Text(
                           labels[i],
                           style: GoogleFonts.dmSans(
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: value == options[i]
                                 ? TaploeColors.blue
@@ -11922,7 +12165,8 @@ class _LinkCardPromptPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stacked = compact || MediaQuery.sizeOf(context).width < 760;
+    final stacked = compact || MediaQuery.sizeOf(context).width < 980;
+    final shopCard = const _TaploeShopPurchaseCard();
     final image = Image.asset(
       'assets/images/tarjeta-nfc.png',
       height: compact ? 108 : 132,
@@ -11976,6 +12220,7 @@ class _LinkCardPromptPanel extends StatelessWidget {
               image,
               SizedBox(height: compact ? 14 : 18),
               copy,
+              if (!compact) ...[const SizedBox(height: 18), shopCard],
             ],
           )
         : Row(
@@ -11983,6 +12228,8 @@ class _LinkCardPromptPanel extends StatelessWidget {
               SizedBox(width: 190, child: image),
               const SizedBox(width: 22),
               Expanded(child: copy),
+              const SizedBox(width: 28),
+              SizedBox(width: 470, child: shopCard),
             ],
           );
 
@@ -12002,6 +12249,94 @@ class _LinkCardPromptPanel extends StatelessWidget {
       radius: 22,
       padding: EdgeInsets.all(compact ? 18 : 22),
       child: content,
+    );
+  }
+}
+
+Future<void> _openTaploeShop() async {
+  final uri = Uri.parse('https://taploe.com');
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+class _TaploeShopPurchaseCard extends StatelessWidget {
+  const _TaploeShopPurchaseCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: _openTaploeShop,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 132),
+        padding: const EdgeInsets.fromLTRB(24, 20, 12, 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F7FF),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFDCE6FF)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '¿Aún no tienes tu tarjeta?',
+                    style: GoogleFonts.outfit(
+                      color: context.text,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Compra tu tarjeta NFC en taploe.com',
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Comprar ahora',
+                        style: GoogleFonts.dmSans(
+                          color: TaploeColors.blue,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.open_in_new_rounded,
+                        color: TaploeColors.blue,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 18),
+            Image.asset(
+              'assets/images/taploe-shop.png',
+              width: 172,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.shopping_cart_rounded,
+                color: TaploeColors.blue,
+                size: 64,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -12079,7 +12414,7 @@ class _CardManagerViewState extends State<CardManagerView> {
         ),
         TaploeButton(
           width: 190,
-          label: 'Agregar tarjeta',
+          label: 'Vincular tarjeta',
           icon: Icons.add_rounded,
           onPressed: () => _showCardLinkingDialog(context),
         ),
@@ -12157,7 +12492,9 @@ class _CardsSection extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 24),
+        const _CardsShopPurchasePanel(),
+        const SizedBox(height: 24),
         Divider(color: TaploeColors.border),
         const SizedBox(height: 18),
         if (cards.isEmpty)
@@ -12175,6 +12512,90 @@ class _CardsSection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _CardsShopPurchasePanel extends StatelessWidget {
+  const _CardsShopPurchasePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final stacked = MediaQuery.sizeOf(context).width < 760;
+
+    final copy = Column(
+      crossAxisAlignment: stacked
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          '¿Aún no tienes tu tarjeta?',
+          textAlign: stacked ? TextAlign.center : TextAlign.left,
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: stacked ? 24 : 28,
+            fontWeight: FontWeight.w700,
+            height: 1.05,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Compra tu tarjeta NFC en taploe.com y vincúlala a tu perfil digital.',
+          textAlign: stacked ? TextAlign.center : TextAlign.left,
+          style: GoogleFonts.dmSans(
+            color: context.muted,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 18),
+        TaploeButton(
+          label: 'Comprar ahora',
+          icon: Icons.open_in_new_rounded,
+          width: stacked ? double.infinity : 190,
+          kind: TaploeButtonKind.secondary,
+          onPressed: _openTaploeShop,
+        ),
+      ],
+    );
+
+    final image = Image.asset(
+      'assets/images/taploe-shop.png',
+      width: stacked ? 190 : 240,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => Icon(
+        Icons.shopping_cart_rounded,
+        color: TaploeColors.blue,
+        size: stacked ? 78 : 96,
+      ),
+    );
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        stacked ? 20 : 28,
+        stacked ? 20 : 18,
+        stacked ? 20 : 24,
+        stacked ? 22 : 18,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FF),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFDCE6FF)),
+      ),
+      child: stacked
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [image, const SizedBox(height: 16), copy],
+            )
+          : Row(
+              children: [
+                Expanded(child: copy),
+                const SizedBox(width: 28),
+                image,
+              ],
+            ),
     );
   }
 }
@@ -15325,7 +15746,7 @@ class _TeamPlanRequestDialogState extends State<_TeamPlanRequestDialog> {
                     TaploeButton(
                       label: 'Enviar solicitud',
                       icon: Icons.send_rounded,
-                      width: 180,
+                      width: 230,
                       loading: saving,
                       onPressed: submit,
                     ),

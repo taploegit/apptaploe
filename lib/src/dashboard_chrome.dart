@@ -118,7 +118,7 @@ class TaploeDashboardSidebar extends StatelessWidget {
                         children: [
                           Icon(Icons.add_card_rounded, size: 20),
                           SizedBox(width: 10),
-                          Text('Agregar tarjeta'),
+                          Text('Vincular tarjeta'),
                         ],
                       ),
                     ),
