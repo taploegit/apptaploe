@@ -503,6 +503,22 @@ class UserRepository {
 }
 
 class OrganizationRepository {
+  static Future<OrganizationModel?> fetchById(String orgId) async {
+    try {
+      final row = await _db
+          .from('organizations')
+          .select()
+          .eq('id', orgId)
+          .maybeSingle();
+      if (row == null) return null;
+      return OrganizationModel.fromJson(Map<String, dynamic>.from(row));
+    } catch (error) {
+      debugPrint('[TaploeOrganizations] No se pudo cargar la organización.');
+      safePrintError(error);
+      return null;
+    }
+  }
+
   static Future<bool> slugExists(String slug) async {
     final clean = normalizePublicSlug(slug);
     if (clean.isEmpty) return false;
@@ -567,6 +583,83 @@ class OrganizationRepository {
         .isFilter('org_id', null);
 
     return org;
+  }
+
+  static Map<String, dynamic> _teamThemePayload(ProfileThemeModel theme) {
+    final payload = Map<String, dynamic>.from(theme.toJson())
+      ..remove('profile_id')
+      ..remove('updated_at');
+    return payload;
+  }
+
+  static Future<OrganizationModel?> saveTeamProfileTheme({
+    required OrganizationModel org,
+    required bool enforce,
+    required ProfileThemeModel theme,
+    String? logoUrl,
+    String? coverPhotoUrl,
+  }) async {
+    await _db.rpc(
+      'set_org_team_profile_theme',
+      params: {
+        'p_org_id': org.id,
+        'p_enforce': enforce,
+        'p_theme': _teamThemePayload(theme),
+        'p_logo_url': logoUrl?.trim().isEmpty == true ? null : logoUrl?.trim(),
+        'p_cover_photo_url': coverPhotoUrl?.trim().isEmpty == true
+            ? null
+            : coverPhotoUrl?.trim(),
+      },
+    );
+    return fetchById(org.id);
+  }
+
+  static Future<OrganizationModel?> saveTeamProfileControls({
+    required OrganizationModel org,
+    required bool enforceForms,
+    required bool enforceIntegrations,
+  }) async {
+    await _db.rpc(
+      'set_org_team_profile_controls',
+      params: {
+        'p_org_id': org.id,
+        'p_enforce_forms': enforceForms,
+        'p_enforce_integrations': enforceIntegrations,
+      },
+    );
+    return fetchById(org.id);
+  }
+
+  static Future<OrganizationModel?> updateCompanyLogo({
+    required OrganizationModel org,
+    String? logoUrl,
+  }) async {
+    final cleanLogoUrl = _cleanOptionalUrl(logoUrl);
+    try {
+      await _db.rpc(
+        'set_org_company_logo',
+        params: {'p_org_id': org.id, 'p_logo_url': cleanLogoUrl},
+      );
+    } on PostgrestException catch (error) {
+      if (error.code != 'PGRST202') rethrow;
+      await _updateCompanyLogoDirectly(org: org, logoUrl: cleanLogoUrl);
+    }
+    return fetchById(org.id);
+  }
+
+  static String? _cleanOptionalUrl(String? url) {
+    final clean = url?.trim();
+    return clean == null || clean.isEmpty ? null : clean;
+  }
+
+  static Future<void> _updateCompanyLogoDirectly({
+    required OrganizationModel org,
+    required String? logoUrl,
+  }) async {
+    await _db
+        .from('organizations')
+        .update({'company_logo_url': logoUrl, 'updated_at': nowIso()})
+        .eq('id', org.id);
   }
 
   static Future<OrganizationSummaryModel> fetchSummary(
@@ -732,17 +825,31 @@ class ProfileRepository {
         .maybeSingle();
 
     if (theme == null) {
+      Map<String, dynamic>? teamTheme;
+      final orgId = profile.orgId;
+      if (orgId != null && orgId.isNotEmpty) {
+        final org = await OrganizationRepository.fetchById(orgId);
+        if (org?.enforceTeamProfileTheme == true &&
+            org?.teamProfileTheme != null) {
+          teamTheme = OrganizationRepository._teamThemePayload(
+            org!.teamProfileTheme!,
+          );
+        }
+      }
       await _db.from('profile_theme_settings').insert({
         'profile_id': profile.id,
-        'theme_style': 'light',
-        'layout_style': 'centered',
-        'primary_color': '#1557FF',
-        'secondary_color': '#FFFFFF',
-        'accent_color': '#1557FF',
-        'background_type': 'solid',
-        'background_color_start': '#FFFFFF',
-        'button_style': 'pill',
-        'font_family': 'system',
+        ...?teamTheme,
+        if (teamTheme == null) ...{
+          'theme_style': 'light',
+          'layout_style': 'centered',
+          'primary_color': '#1557FF',
+          'secondary_color': '#FFFFFF',
+          'accent_color': '#1557FF',
+          'background_type': 'solid',
+          'background_color_start': '#FFFFFF',
+          'button_style': 'pill',
+          'font_family': 'system',
+        },
       });
     }
 
@@ -770,8 +877,29 @@ class ProfileRepository {
         .eq('owner_user_id', userId)
         .neq('status', 'deleted')
         .order('created_at');
-    return (rows as List)
+    final profiles = (rows as List)
         .map((e) => DigitalProfileModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    return Future.wait(profiles.map(_withOrganizationBranding));
+  }
+
+  static Future<List<DigitalProfileModel>> fetchProfilesForOrg(
+    String orgId,
+  ) async {
+    final org = await OrganizationRepository.fetchById(orgId);
+    final rows = await _db
+        .from('digital_profiles')
+        .select(_selectFull)
+        .eq('org_id', orgId)
+        .neq('status', 'deleted')
+        .order('created_at');
+    return (rows as List)
+        .map(
+          (e) => _applyOrganizationBranding(
+            DigitalProfileModel.fromJson(Map<String, dynamic>.from(e)),
+            org,
+          ),
+        )
         .toList();
   }
 
@@ -782,7 +910,9 @@ class ProfileRepository {
         .eq('id', id)
         .maybeSingle();
     if (row == null) return null;
-    return DigitalProfileModel.fromJson(Map<String, dynamic>.from(row));
+    return _withOrganizationBranding(
+      DigitalProfileModel.fromJson(Map<String, dynamic>.from(row)),
+    );
   }
 
   static Future<DigitalProfileModel?> fetchProfileBySlug(String slug) async {
@@ -793,8 +923,60 @@ class ProfileRepository {
         .eq('status', 'active')
         .maybeSingle();
     if (row == null) return null;
-    return DigitalProfileModel.fromJson(Map<String, dynamic>.from(row));
+    return _withOrganizationBranding(
+      DigitalProfileModel.fromJson(Map<String, dynamic>.from(row)),
+    );
   }
+
+  static Future<DigitalProfileModel> _withOrganizationBranding(
+    DigitalProfileModel profile,
+  ) async {
+    final orgId = profile.orgId;
+    if (orgId == null || orgId.isEmpty) return profile;
+    final org = await OrganizationRepository.fetchById(orgId);
+    return _applyOrganizationBranding(profile, org);
+  }
+
+  static DigitalProfileModel _applyOrganizationBranding(
+    DigitalProfileModel profile,
+    OrganizationModel? org,
+  ) {
+    if (org == null) return profile;
+    final companyLogoUrl = org.logoUrl?.trim();
+    final hasCompanyLogo = companyLogoUrl != null && companyLogoUrl.isNotEmpty;
+    final teamTheme = org.teamProfileTheme;
+    return profile.copyWith(
+      logoUrl: hasCompanyLogo ? companyLogoUrl : null,
+      clearLogoUrl: !hasCompanyLogo,
+      coverPhotoUrl: org.enforceTeamProfileTheme
+          ? org.teamProfileCoverPhotoUrl ?? profile.coverPhotoUrl
+          : profile.coverPhotoUrl,
+      theme: org.enforceTeamProfileTheme
+          ? teamTheme == null
+                ? profile.theme
+                : _themeForProfile(teamTheme, profile.id)
+          : profile.theme,
+    );
+  }
+
+  static ProfileThemeModel _themeForProfile(
+    ProfileThemeModel theme,
+    String profileId,
+  ) => ProfileThemeModel(
+    id: theme.id,
+    profileId: profileId,
+    themeStyle: theme.themeStyle,
+    layoutStyle: theme.layoutStyle,
+    primaryColor: theme.primaryColor,
+    secondaryColor: theme.secondaryColor,
+    accentColor: theme.accentColor,
+    backgroundType: theme.backgroundType,
+    backgroundColorStart: theme.backgroundColorStart,
+    backgroundColorEnd: theme.backgroundColorEnd,
+    backgroundImageUrl: theme.backgroundImageUrl,
+    buttonStyle: theme.buttonStyle,
+    fontFamily: theme.fontFamily,
+  );
 
   static Future<DigitalProfileModel> createProfileForUser(
     AppUserModel user, {
@@ -847,16 +1029,28 @@ class ProfileRepository {
         .update(profile.toUpdate())
         .eq('id', profile.id);
 
-    if (profile.theme != null) {
+    if (profile.theme != null && profile.theme!.profileId.isNotEmpty) {
       await _db
           .from('profile_theme_settings')
           .upsert(profile.theme!.toJson(), onConflict: 'profile_id');
     }
-    if (profile.vcard != null) {
+    if (profile.vcard != null && profile.vcard!.profileId.isNotEmpty) {
       await _db
           .from('profile_vcard_details')
           .upsert(profile.vcard!.toJson(), onConflict: 'profile_id');
     }
+
+    return (await fetchProfileById(profile.id))!;
+  }
+
+  static Future<DigitalProfileModel> updateVerifiedBadge({
+    required DigitalProfileModel profile,
+    required bool value,
+  }) async {
+    await _db
+        .from('digital_profiles')
+        .update({'show_verified_badge': value, 'updated_at': nowIso()})
+        .eq('id', profile.id);
 
     return (await fetchProfileById(profile.id))!;
   }
@@ -1712,6 +1906,20 @@ class LeadRepository {
         .toList();
   }
 
+  static Future<List<LeadModel>> fetchForProfiles(
+    List<String> profileIds,
+  ) async {
+    if (profileIds.isEmpty) return const [];
+    final rows = await _db
+        .from('leads')
+        .select()
+        .inFilter('profile_id', profileIds)
+        .order('last_seen_at', ascending: false);
+    return (rows as List)
+        .map((e) => LeadModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
   static Future<LeadModel> upsertLeadFromForm({
     required DigitalProfileModel profile,
     required Map<String, dynamic> data,
@@ -1773,7 +1981,37 @@ class LeadRepository {
         })
         .select()
         .single();
-    return LeadModel.fromJson(Map<String, dynamic>.from(row));
+    final lead = LeadModel.fromJson(Map<String, dynamic>.from(row));
+    await _createLeadNotification(profile: profile, lead: lead);
+    return lead;
+  }
+
+  static Future<void> _createLeadNotification({
+    required DigitalProfileModel profile,
+    required LeadModel lead,
+  }) async {
+    if (profile.ownerUserId.isEmpty) return;
+    final leadName = lead.displayName.trim();
+    try {
+      await _db.from('app_notifications').insert({
+        'user_id': profile.ownerUserId,
+        'profile_id': profile.id,
+        'lead_id': lead.id,
+        'notification_type': 'lead_created',
+        'title': 'Nuevo lead',
+        'body': leadName.isEmpty
+            ? 'Recibiste un nuevo lead desde tu perfil.'
+            : '$leadName dejó sus datos en tu perfil.',
+        'action_url': '/leads',
+        'metadata': {
+          'source_channel': lead.sourceChannel,
+          'profile_name': profile.displayName,
+        },
+      });
+    } catch (error) {
+      debugPrint('[TaploeNotifications] No se pudo crear aviso de lead.');
+      safePrintError(error);
+    }
   }
 
   static Future<void> updateStatus(String leadId, String status) async {
@@ -2062,17 +2300,36 @@ class TeamRepository {
   static Future<AppUserModel?> findUserByEmailOrUsername(String value) async {
     final query = value.trim().toLowerCase();
     if (query.isEmpty) return null;
-    final column = query.contains('@') ? 'email' : 'username';
-    final normalized = column == 'username'
-        ? UserRepository.normalizeUsername(query)
-        : query;
-    final row = await _db
-        .from('app_users')
-        .select()
-        .eq(column, normalized)
-        .maybeSingle();
-    if (row == null) return null;
-    return AppUserModel.fromJson(Map<String, dynamic>.from(row));
+    try {
+      final rows = await _db.rpc(
+        'find_invitable_app_user',
+        params: {'p_lookup': query},
+      );
+      if (rows is List && rows.isNotEmpty) {
+        return AppUserModel.fromJson(Map<String, dynamic>.from(rows.first));
+      }
+    } catch (error) {
+      debugPrint('[TaploeTeam] No se pudo usar find_invitable_app_user.');
+      safePrintError(error);
+    }
+
+    try {
+      final column = query.contains('@') ? 'email' : 'username';
+      final normalized = column == 'username'
+          ? UserRepository.normalizeUsername(query)
+          : query;
+      final row = await _db
+          .from('app_users')
+          .select()
+          .ilike(column, normalized)
+          .maybeSingle();
+      if (row == null) return null;
+      return AppUserModel.fromJson(Map<String, dynamic>.from(row));
+    } catch (error) {
+      debugPrint('[TaploeTeam] No se pudo buscar usuario para invitación.');
+      safePrintError(error);
+      return null;
+    }
   }
 
   static Future<void> inviteMember({
@@ -2081,6 +2338,18 @@ class TeamRepository {
     required String emailOrUsername,
     String role = 'member',
   }) async {
+    final inviterMembership = await _db
+        .from('organization_members')
+        .select('role,status')
+        .eq('org_id', org.id)
+        .eq('user_id', invitedBy.id)
+        .eq('status', 'active')
+        .maybeSingle();
+    final inviterRole = inviterMembership?['role'] as String?;
+    if (inviterRole != 'owner' && inviterRole != 'admin') {
+      throw const TeamInviteException('not_allowed');
+    }
+
     final invitedUser = await findUserByEmailOrUsername(emailOrUsername);
     if (invitedUser == null) {
       throw const TeamInviteException('user_not_found');
@@ -2229,6 +2498,40 @@ class TeamRepository {
     String? ownerUserId,
     int limit = 8,
   }) async {
+    try {
+      final rows = await _db.rpc(
+        'list_org_team_activity',
+        params: {
+          'p_org_id': orgId,
+          'p_owner_user_id': ownerUserId,
+          'p_limit': limit * 2,
+        },
+      );
+      if (rows is List) {
+        return rows
+            .map((raw) {
+              final row = Map<String, dynamic>.from(raw as Map);
+              return TeamActivityModel(
+                event: AnalyticsEventModel.fromJson(row),
+                memberName: row['member_name'] as String? ?? 'Miembro',
+                profileName: row['profile_name'] as String? ?? 'perfil',
+              );
+            })
+            .where(
+              (activity) => !AnalyticsRepository._isLegacyProfileInstallEvent(
+                activity.event.eventType,
+              ),
+            )
+            .take(limit)
+            .toList();
+      }
+    } catch (error) {
+      debugPrint(
+        '[TaploeTeam] No se pudo cargar actividad del equipo por RPC.',
+      );
+      safePrintError(error);
+    }
+
     var profilesQuery = _db
         .from('digital_profiles')
         .select('id,owner_user_id,display_name,profile_name')
@@ -2303,20 +2606,85 @@ class TeamRepository {
   }
 
   static Future<List<TeamMemberModel>> fetchTeam(String orgId) async {
-    final memberships = await _db
-        .from('organization_members')
-        .select()
-        .eq('org_id', orgId)
-        .eq('status', 'active');
+    var memberRows = <Map<String, dynamic>>[];
+    try {
+      final rows = await _db.rpc(
+        'list_org_team_members',
+        params: {'p_org_id': orgId},
+      );
+      if (rows is List) {
+        memberRows = rows
+            .map((row) => Map<String, dynamic>.from(row as Map))
+            .toList();
+      }
+    } catch (error) {
+      debugPrint('[TaploeTeam] No se pudo cargar directorio del equipo.');
+      safePrintError(error);
+    }
 
-    final userIds = (memberships as List)
-        .map((e) => (e as Map)['user_id'])
-        .whereType<String>()
-        .toList();
+    if (memberRows.isEmpty) {
+      final memberships = await _db
+          .from('organization_members')
+          .select()
+          .eq('org_id', orgId)
+          .eq('status', 'active');
+
+      final fallbackUserIds = (memberships as List)
+          .map((e) => (e as Map)['user_id'])
+          .whereType<String>()
+          .toList();
+
+      if (fallbackUserIds.isNotEmpty) {
+        final users = await _db
+            .from('app_users')
+            .select()
+            .inFilter('id', fallbackUserIds);
+        memberRows = (users as List).map((raw) {
+          final user = Map<String, dynamic>.from(raw as Map);
+          final id = user['id'] as String;
+          final membership =
+              memberships.firstWhere(
+                    (m) => (m as Map)['user_id'] == id,
+                    orElse: () => {'role': 'member', 'status': 'active'},
+                  )
+                  as Map;
+          return {
+            ...user,
+            'role': membership['role'] as String? ?? 'member',
+            'status': membership['status'] as String? ?? 'active',
+          };
+        }).toList();
+      }
+    }
+
+    final userIds = memberRows.map((e) => e['id']).whereType<String>().toList();
 
     if (userIds.isEmpty) return [];
+    if (memberRows.first.containsKey('profiles')) {
+      final activeMembers = memberRows.map((user) {
+        return TeamMemberModel(
+          id: user['id'] as String,
+          name:
+              user['username'] as String? ?? user['full_name'] as String? ?? '',
+          email: user['email'] as String? ?? '',
+          role: user['role'] as String? ?? 'member',
+          status: user['status'] as String? ?? 'active',
+          avatarUrl:
+              user['profile_avatar_url'] as String? ??
+              user['avatar_url'] as String?,
+          profiles: _teamCount(user['profiles']),
+          views: _teamCount(user['views']),
+          nfc: _teamCount(user['nfc']),
+          qr: _teamCount(user['qr']),
+          clicks: _teamCount(user['clicks']),
+          cards: _teamCount(user['cards']),
+          leads: _teamCount(user['leads']),
+        );
+      }).toList();
+      final pendingMembers = await _fetchPendingMembers(orgId, userIds);
+      return [...activeMembers, ...pendingMembers];
+    }
 
-    final users = await _db.from('app_users').select().inFilter('id', userIds);
     final profiles = await _db
         .from('digital_profiles')
         .select('id, owner_user_id, profile_photo_url, is_default, created_at')
@@ -2346,15 +2714,8 @@ class TeamRepository {
               .select('owner_user_id,status')
               .inFilter('owner_user_id', userIds);
 
-    return (users as List).map((raw) {
-      final user = Map<String, dynamic>.from(raw as Map);
+    final activeMembers = memberRows.map((user) {
       final id = user['id'] as String;
-      final roleRaw =
-          (memberships as List).firstWhere(
-                (m) => (m as Map)['user_id'] == id,
-                orElse: () => {'role': 'member'},
-              )
-              as Map;
       final pIds = (profiles as List)
           .where((p) => (p as Map)['owner_user_id'] == id)
           .map((p) => (p as Map)['id'])
@@ -2424,7 +2785,8 @@ class TeamRepository {
         id: id,
         name: user['username'] as String? ?? user['full_name'] as String? ?? '',
         email: user['email'] as String? ?? '',
-        role: roleRaw['role'] as String? ?? 'member',
+        role: user['role'] as String? ?? 'member',
+        status: user['status'] as String? ?? 'active',
         avatarUrl: profileAvatar ?? user['avatar_url'] as String?,
         profiles: pIds.length,
         views: views,
@@ -2435,5 +2797,65 @@ class TeamRepository {
         leads: leadCount,
       );
     }).toList();
+
+    final pendingMembers = await _fetchPendingMembers(orgId, userIds);
+
+    return [...activeMembers, ...pendingMembers];
+  }
+
+  static int _teamCount(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+  static Future<List<TeamMemberModel>> _fetchPendingMembers(
+    String orgId,
+    List<String> userIds,
+  ) async {
+    final pendingMembers = <TeamMemberModel>[];
+    try {
+      final rows = await _db.rpc(
+        'list_org_pending_invitations',
+        params: {'p_org_id': orgId},
+      );
+      if (rows is List) {
+        for (final raw in rows) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final userId = row['invited_user_id'] as String? ?? '';
+          if (userId.isEmpty || userIds.contains(userId)) continue;
+          pendingMembers.add(
+            TeamMemberModel(
+              id: userId,
+              name: row['username'] as String? ?? 'Usuario invitado',
+              email: row['email'] as String? ?? '',
+              role: row['role'] as String? ?? 'member',
+              status: 'pending',
+              invitationId: row['invitation_id'] as String?,
+              avatarUrl: row['avatar_url'] as String?,
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      debugPrint('[TaploeTeam] No se pudieron cargar invitaciones pendientes.');
+      safePrintError(error);
+    }
+    return pendingMembers;
+  }
+
+  static Future<void> cancelInvitation(String invitationId) async {
+    await _db
+        .from('organization_invitations')
+        .update({'status': 'cancelled', 'responded_at': nowIso()})
+        .eq('id', invitationId)
+        .eq('status', 'pending');
+  }
+
+  static Future<void> removeMember({
+    required String orgId,
+    required String userId,
+  }) async {
+    await _db.rpc(
+      'remove_org_team_member',
+      params: {'p_org_id': orgId, 'p_user_id': userId},
+    );
   }
 }

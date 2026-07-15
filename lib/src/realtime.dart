@@ -10,30 +10,53 @@ class TaploeRealtimeSubscription {
     required String profileId,
     required VoidCallback onRefresh,
   }) {
-    final channel = Supabase.instance.client.channel('taploe-profile-$profileId')
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'analytics_events',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'profile_id',
-          value: profileId,
-        ),
-        callback: (_) => onRefresh(),
-      )
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'leads',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'profile_id',
-          value: profileId,
-        ),
-        callback: (_) => onRefresh(),
-      )
-      ..subscribe();
+    final channel =
+        Supabase.instance.client.channel('taploe-profile-$profileId')
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'analytics_events',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'profile_id',
+              value: profileId,
+            ),
+            callback: (_) => onRefresh(),
+          )
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'leads',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'profile_id',
+              value: profileId,
+            ),
+            callback: (_) => onRefresh(),
+          )
+          ..subscribe();
+
+    return TaploeRealtimeSubscription._(channel);
+  }
+
+  static TaploeRealtimeSubscription forNotifications({
+    required String userId,
+    required VoidCallback onRefresh,
+  }) {
+    final channel =
+        Supabase.instance.client.channel('taploe-notifications-$userId')
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'app_notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: userId,
+            ),
+            callback: (_) => onRefresh(),
+          )
+          ..subscribe();
 
     return TaploeRealtimeSubscription._(channel);
   }

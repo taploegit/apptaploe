@@ -211,11 +211,13 @@ class TaploeButton extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ],
@@ -784,6 +786,40 @@ void taploeToast(BuildContext context, String message, {bool error = false}) {
   );
 }
 
+void taploeNotificationToast(
+  BuildContext context, {
+  required String title,
+  required String reason,
+  String? actionLabel,
+  VoidCallback? onAction,
+}) {
+  final messenger = ScaffoldMessenger.of(context);
+  final media = MediaQuery.of(context);
+  final topOffset = media.padding.top + 46;
+  final bottomMargin = (media.size.height - topOffset - 92).clamp(
+    22.0,
+    10000.0,
+  );
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 9),
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      backgroundColor: Colors.transparent,
+      clipBehavior: Clip.none,
+      content: _TaploeIncomingNotificationToast(
+        title: title,
+        reason: reason,
+        actionLabel: actionLabel,
+        onAction: onAction,
+      ),
+      margin: EdgeInsets.only(left: 12, right: 12, bottom: bottomMargin),
+    ),
+  );
+}
+
 class _TaploeNotificationToast extends StatelessWidget {
   final String message;
   final bool error;
@@ -851,6 +887,149 @@ class _TaploeNotificationToast extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    tooltip: 'Cerrar',
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    onPressed: () =>
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: TaploeColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TaploeIncomingNotificationToast extends StatelessWidget {
+  final String title;
+  final String reason;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _TaploeIncomingNotificationToast({
+    required this.title,
+    required this.reason,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topRight,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 18, 30),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 430),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: TaploeColors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: TaploeColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: TaploeColors.black.withValues(alpha: .12),
+                  blurRadius: 24,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: TaploeColors.error,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: TaploeColors.error.withValues(alpha: .34),
+                        blurRadius: 14,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.notifications_active_rounded,
+                    color: TaploeColors.white,
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: TaploeColors.black,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        reason,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: TaploeColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                if (actionLabel != null && onAction != null) ...[
+                  TextButton(
+                    onPressed: onAction,
+                    style: TextButton.styleFrom(
+                      foregroundColor: TaploeColors.white,
+                      backgroundColor: TaploeColors.error,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      minimumSize: const Size(0, 34),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: Text(
+                      actionLabel!,
+                      style: GoogleFonts.dmSans(
+                        color: TaploeColors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 SizedBox(
                   width: 28,
                   height: 28,

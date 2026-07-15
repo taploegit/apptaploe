@@ -139,6 +139,12 @@ class OrganizationModel {
   final String? phone;
   final String? email;
   final String planType;
+  final bool enforceTeamProfileTheme;
+  final bool enforceTeamProfileForms;
+  final bool enforceTeamProfileIntegrations;
+  final ProfileThemeModel? teamProfileTheme;
+  final String? teamProfileLogoUrl;
+  final String? teamProfileCoverPhotoUrl;
 
   const OrganizationModel({
     required this.id,
@@ -149,19 +155,40 @@ class OrganizationModel {
     this.phone,
     this.email,
     this.planType = 'free',
+    this.enforceTeamProfileTheme = false,
+    this.enforceTeamProfileForms = false,
+    this.enforceTeamProfileIntegrations = false,
+    this.teamProfileTheme,
+    this.teamProfileLogoUrl,
+    this.teamProfileCoverPhotoUrl,
   });
 
-  factory OrganizationModel.fromJson(Map<String, dynamic> json) =>
-      OrganizationModel(
-        id: json['id'] as String,
-        name: json['name'] as String? ?? '',
-        slug: json['slug'] as String?,
-        logoUrl: json['company_logo_url'] as String?,
-        websiteUrl: json['website_url'] as String?,
-        phone: json['phone'] as String?,
-        email: json['email']?.toString(),
-        planType: json['plan_type'] as String? ?? 'free',
-      );
+  factory OrganizationModel.fromJson(Map<String, dynamic> json) {
+    final teamTheme = json['team_profile_theme'] is Map
+        ? Map<String, dynamic>.from(json['team_profile_theme'] as Map)
+        : null;
+    return OrganizationModel(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String?,
+      logoUrl: json['company_logo_url'] as String?,
+      websiteUrl: json['website_url'] as String?,
+      phone: json['phone'] as String?,
+      email: json['email']?.toString(),
+      planType: json['plan_type'] as String? ?? 'free',
+      enforceTeamProfileTheme:
+          json['enforce_team_profile_theme'] as bool? ?? false,
+      enforceTeamProfileForms:
+          json['enforce_team_profile_forms'] as bool? ?? false,
+      enforceTeamProfileIntegrations:
+          json['enforce_team_profile_integrations'] as bool? ?? false,
+      teamProfileTheme: teamTheme != null
+          ? ProfileThemeModel.fromJson({'profile_id': '', ...teamTheme})
+          : null,
+      teamProfileLogoUrl: teamTheme?['logo_url'] as String?,
+      teamProfileCoverPhotoUrl: teamTheme?['cover_photo_url'] as String?,
+    );
+  }
 }
 
 class OrganizationSummaryModel {
@@ -542,6 +569,8 @@ class DigitalProfileModel {
     String? profilePhotoUrl,
     String? coverPhotoUrl,
     String? logoUrl,
+    bool clearLogoUrl = false,
+    String? status,
     bool? showVerifiedBadge,
     ProfileThemeModel? theme,
     ProfileVcardModel? vcard,
@@ -558,8 +587,8 @@ class DigitalProfileModel {
     publicSlug: publicSlug ?? this.publicSlug,
     profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
     coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
-    logoUrl: logoUrl ?? this.logoUrl,
-    status: status,
+    logoUrl: clearLogoUrl ? null : logoUrl ?? this.logoUrl,
+    status: status ?? this.status,
     isDefault: isDefault,
     showVerifiedBadge: showVerifiedBadge ?? this.showVerifiedBadge,
     theme: theme ?? this.theme,
@@ -1137,6 +1166,8 @@ class TeamMemberModel {
   final String name;
   final String email;
   final String role;
+  final String status;
+  final String? invitationId;
   final String? avatarUrl;
   final int profiles;
   final int views;
@@ -1151,6 +1182,8 @@ class TeamMemberModel {
     required this.name,
     required this.email,
     required this.role,
+    this.status = 'active',
+    this.invitationId,
     this.avatarUrl,
     this.profiles = 0,
     this.views = 0,
@@ -1160,4 +1193,6 @@ class TeamMemberModel {
     this.cards = 0,
     this.leads = 0,
   });
+
+  bool get isPending => status == 'pending';
 }

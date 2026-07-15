@@ -95,7 +95,7 @@ class TaploeState extends ChangeNotifier {
       );
 
       cards = await CardRepository.fetchCardsForUser(currentUser!.id);
-      profiles = await ProfileRepository.fetchProfilesForUser(currentUser!.id);
+      profiles = await _fetchEditableProfiles();
       _selectActiveProfileFallback();
     } catch (error) {
       debugPrint('[TaploeState] Bootstrap falló.');
@@ -122,10 +122,52 @@ class TaploeState extends ChangeNotifier {
   Future<void> refreshProfiles() async {
     if (currentUser == null) return;
 
-    profiles = await ProfileRepository.fetchProfilesForUser(currentUser!.id);
+    final current = activeProfile;
+    profiles = await _fetchEditableProfiles();
+    if (current != null && current.ownerUserId != currentUser!.id) {
+      activeProfile = await ProfileRepository.fetchProfileById(current.id);
+      activeProfile ??= current;
+      notifyListeners();
+      return;
+    }
     _selectActiveProfileFallback();
 
     notifyListeners();
+  }
+
+  Future<List<DigitalProfileModel>> _fetchEditableProfiles() async {
+    final user = currentUser;
+    if (user == null) return const [];
+    final ownProfiles = await ProfileRepository.fetchProfilesForUser(user.id);
+    final org = organization;
+    if (org == null) return ownProfiles;
+
+    try {
+      final members = await TeamRepository.fetchTeam(org.id);
+      String? role;
+      for (final member in members) {
+        if (member.id == user.id && member.status == 'active') {
+          role = member.role;
+          break;
+        }
+      }
+      if (role != 'owner' && role != 'admin') return ownProfiles;
+
+      final orgProfiles = await ProfileRepository.fetchProfilesForOrg(org.id);
+      return _dedupeProfiles([...ownProfiles, ...orgProfiles]);
+    } catch (error) {
+      debugPrint('[TaploeState] No se pudieron cargar perfiles editables.');
+      safePrintError(error);
+      return ownProfiles;
+    }
+  }
+
+  List<DigitalProfileModel> _dedupeProfiles(List<DigitalProfileModel> input) {
+    final byId = <String, DigitalProfileModel>{};
+    for (final profile in input) {
+      byId[profile.id] = profile;
+    }
+    return byId.values.toList();
   }
 
   Future<void> refreshCards() async {
