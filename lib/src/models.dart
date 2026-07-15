@@ -96,6 +96,40 @@ class AppNotificationModel {
       );
 }
 
+class TeamInvitationModel {
+  final String id;
+  final String orgId;
+  final String invitedUserId;
+  final String invitedByUserId;
+  final String role;
+  final String status;
+  final DateTime? respondedAt;
+  final DateTime? createdAt;
+
+  const TeamInvitationModel({
+    required this.id,
+    required this.orgId,
+    required this.invitedUserId,
+    required this.invitedByUserId,
+    required this.role,
+    required this.status,
+    this.respondedAt,
+    this.createdAt,
+  });
+
+  factory TeamInvitationModel.fromJson(Map<String, dynamic> json) =>
+      TeamInvitationModel(
+        id: json['id'] as String,
+        orgId: json['org_id'] as String? ?? '',
+        invitedUserId: json['invited_user_id'] as String? ?? '',
+        invitedByUserId: json['invited_by_user_id'] as String? ?? '',
+        role: json['role'] as String? ?? 'member',
+        status: json['status'] as String? ?? 'pending',
+        respondedAt: _dt(json['responded_at']),
+        createdAt: _dt(json['created_at']),
+      );
+}
+
 class OrganizationModel {
   final String id;
   final String name;
@@ -964,6 +998,18 @@ class AnalyticsSummaryModel {
     required this.formSubmits,
     required this.viewsByDay,
     required this.clicksByLabel,
+  });
+}
+
+class TeamActivityModel {
+  final AnalyticsEventModel event;
+  final String memberName;
+  final String profileName;
+
+  const TeamActivityModel({
+    required this.event,
+    required this.memberName,
+    required this.profileName,
   });
 }
 

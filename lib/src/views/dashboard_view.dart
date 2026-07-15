@@ -16,6 +16,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../company_logo_drop.dart';
 import '../models.dart';
 import '../profile_public_card.dart';
 import '../pwa_install_panel.dart';
@@ -424,10 +425,10 @@ class _EntryPlanComparisonView extends StatelessWidget {
         buttonLabel: 'Probar 7 días gratis',
         onPressed: onPremium,
         features: const [
+          (Icons.visibility_off_rounded, 'Perfil profesional sin marca Taploe'),
+          (Icons.insights_rounded, 'Visitas y enlaces con más interés'),
+          (Icons.palette_rounded, 'Identidad digital personalizada'),
           (Icons.badge_rounded, 'Hasta 5 perfiles digitales'),
-          (Icons.qr_code_2_rounded, 'QR personalizables'),
-          (Icons.palette_rounded, 'Diseño de perfil digital'),
-          (Icons.insights_rounded, 'Analíticas completas'),
         ],
       ),
       _PlanComparisonCard(
@@ -439,12 +440,12 @@ class _EntryPlanComparisonView extends StatelessWidget {
         buttonLabel: 'Probar 7 días gratis',
         onPressed: onTeam,
         features: const [
-          (Icons.groups_rounded, 'Desde 5 perfiles'),
-          (Icons.dashboard_customize_rounded, 'Plantillas de marca'),
-          (Icons.admin_panel_settings_rounded, 'Control de tarjetas'),
-          (Icons.verified_rounded, 'Perfiles verificados'),
-          (Icons.event_available_rounded, 'Calendario y formularios'),
-          (Icons.file_download_rounded, 'Exportación de contactos'),
+          (Icons.groups_rounded, 'Administra tu equipo en un solo lugar'),
+          (Icons.palette_rounded, 'Imagen consistente para la empresa'),
+          (Icons.sync_rounded, 'Actualiza colaboradores en minutos'),
+          (Icons.credit_card_rounded, 'Reasigna tarjetas al cambiar personal'),
+          (Icons.query_stats_rounded, 'Rendimiento por colaborador'),
+          (Icons.handshake_rounded, 'Leads del equipo centralizados'),
         ],
       ),
       _PlanComparisonCard(
@@ -1118,42 +1119,52 @@ class _EntryDialogPlanContent extends StatelessWidget {
     final isTeam = plan == _EntryDialogPlan.team;
     final features = isTeam
         ? const [
-            (Icons.groups_rounded, 'Desde 5 perfiles para tu equipo.'),
-            (Icons.qr_code_2_rounded, 'Códigos QR personalizables por perfil.'),
+            (Icons.groups_rounded, 'Administra tu equipo en un solo lugar.'),
+            (Icons.palette_rounded, 'Imagen consistente en toda la empresa.'),
+            (Icons.sync_rounded, 'Actualiza colaboradores en minutos.'),
             (
-              Icons.dashboard_customize_rounded,
-              'Plantillas para mantener consistencia de marca.',
+              Icons.credit_card_rounded,
+              'Reasigna tarjetas cuando alguien cambia.',
             ),
-            (Icons.visibility_off_rounded, 'Oculta la marca de Taploe.'),
+            (Icons.query_stats_rounded, 'Mide el rendimiento por colaborador.'),
+            (Icons.handshake_rounded, 'Centraliza todos los leads del equipo.'),
+            (Icons.apartment_rounded, 'Refuerza tu marca en cada interacción.'),
             (
-              Icons.event_available_rounded,
-              'Calendario y formularios integrados.',
+              Icons.savings_rounded,
+              'Evita reimprimir tarjetas por cada cambio.',
             ),
-            (Icons.person_search_rounded, 'Registro de leads por perfil.'),
-            (Icons.file_download_rounded, 'Exportación de contactos.'),
-            (Icons.insights_rounded, 'Analíticas de taps, clics y escaneos.'),
-            (Icons.verified_rounded, 'Marca verificada en cada perfil.'),
             (
               Icons.admin_panel_settings_rounded,
-              'Control administrativo de tarjetas.',
+              'Control de perfiles y permisos.',
             ),
           ]
         : const [
             (
-              Icons.badge_rounded,
-              'Hasta 5 perfiles digitales para cada ocasión.',
+              Icons.visibility_off_rounded,
+              'Perfil profesional sin marca Taploe.',
             ),
-            (Icons.qr_code_2_rounded, 'Códigos QR personalizables.'),
-            (Icons.palette_rounded, 'Diseño de perfil digital personalizado.'),
-            (Icons.visibility_off_rounded, 'Oculta la marca de Taploe.'),
+            (
+              Icons.insights_rounded,
+              'Conoce visitas y enlaces con más interés.',
+            ),
+            (Icons.palette_rounded, 'Personaliza tu identidad digital.'),
+            (
+              Icons.sync_rounded,
+              'Actualiza tu información sin reimprimir tarjetas.',
+            ),
+            (Icons.badge_rounded, 'Hasta 5 perfiles digitales.'),
             (
               Icons.event_available_rounded,
-              'Calendario y formularios integrados.',
+              'Permite que agenden reuniones contigo.',
             ),
-            (Icons.person_search_rounded, 'Registro de leads.'),
-            (Icons.file_download_rounded, 'Exportación de contactos.'),
-            (Icons.insights_rounded, 'Analíticas de taps, clics y escaneos.'),
-            (Icons.verified_rounded, 'Marca verificada en tu perfil.'),
+            (
+              Icons.business_center_rounded,
+              'Imagen más profesional al hacer networking.',
+            ),
+            (
+              Icons.rocket_launch_rounded,
+              'Herramientas para generar oportunidades.',
+            ),
           ];
 
     return Padding(
@@ -2163,6 +2174,7 @@ class _TopHeader extends StatelessWidget {
                     const SizedBox(width: 10),
                     _NotificationBell(
                       onOpenLeads: () => onSelected(DashboardSection.leads),
+                      onOpenTeam: () => onSelected(DashboardSection.team),
                     ),
                     const SizedBox(width: 10),
                     TaploeButton(
@@ -2209,16 +2221,12 @@ class _TopHeader extends StatelessWidget {
                           ),
                         ),
                       ],
-                      child: CircleAvatar(
-                        backgroundColor: TaploeColors.black,
-                        child: Text(
-                          initials(
+                      child: _UserAvatar(
+                        label:
                             taploeState.currentUser?.username.isNotEmpty == true
-                                ? taploeState.currentUser!.username
-                                : taploeState.currentUser?.email ?? 'T',
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                            ? taploeState.currentUser!.username
+                            : taploeState.currentUser?.email ?? 'T',
+                        imageUrl: taploeState.activeProfile?.profilePhotoUrl,
                       ),
                     ),
                   ],
@@ -2354,10 +2362,75 @@ class _AccountMenuItem extends StatelessWidget {
   }
 }
 
+class _UserAvatar extends StatelessWidget {
+  final String label;
+  final String? imageUrl;
+  final double radius;
+  final double fontSize;
+
+  const _UserAvatar({
+    required this.label,
+    this.imageUrl,
+    this.radius = 20,
+    this.fontSize = 14,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanUrl = imageUrl?.trim();
+    if (cleanUrl?.isNotEmpty == true) {
+      return ClipOval(
+        child: SizedBox(
+          width: radius * 2,
+          height: radius * 2,
+          child: Image.network(
+            cleanUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _InitialAvatar(
+              label: label,
+              radius: radius,
+              fontSize: fontSize,
+            ),
+          ),
+        ),
+      );
+    }
+    return _InitialAvatar(label: label, radius: radius, fontSize: fontSize);
+  }
+}
+
+class _InitialAvatar extends StatelessWidget {
+  final String label;
+  final double radius;
+  final double fontSize;
+
+  const _InitialAvatar({
+    required this.label,
+    required this.radius,
+    required this.fontSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: TaploeColors.black,
+      child: Text(
+        initials(label),
+        style: TextStyle(color: Colors.white, fontSize: fontSize),
+      ),
+    );
+  }
+}
+
 class _NotificationBell extends StatefulWidget {
   final VoidCallback onOpenLeads;
+  final VoidCallback onOpenTeam;
 
-  const _NotificationBell({required this.onOpenLeads});
+  const _NotificationBell({
+    required this.onOpenLeads,
+    required this.onOpenTeam,
+  });
 
   @override
   State<_NotificationBell> createState() => _NotificationBellState();
@@ -2397,11 +2470,48 @@ class _NotificationBellState extends State<_NotificationBell> {
   }
 
   Future<void> _openNotification(AppNotificationModel notification) async {
+    if (notification.notificationType == 'team_invitation') {
+      await _openTeamInvitation(notification);
+      return;
+    }
     if (notification.isUnread) {
       await NotificationRepository.markAsRead(notification.id);
       await _load();
     }
     widget.onOpenLeads();
+  }
+
+  Future<void> _openTeamInvitation(AppNotificationModel notification) async {
+    final invitationId = notification.metadata['invitation_id']?.toString();
+    final currentUser = taploeState.currentUser;
+    if (invitationId == null || invitationId.isEmpty || currentUser == null) {
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => _TeamInvitationDialog(notification: notification),
+    );
+    if (accepted == null) return;
+    try {
+      await TeamRepository.respondToInvitation(
+        invitationId: invitationId,
+        user: currentUser,
+        accept: accepted,
+      );
+      await taploeState.bootstrap();
+      await _load();
+      if (!mounted) return;
+      widget.onOpenTeam();
+      taploeToast(
+        context,
+        accepted ? 'Te uniste al equipo.' : 'Invitación declinada.',
+      );
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(context, 'No pudimos responder esta invitación.');
+      }
+    }
   }
 
   @override
@@ -2652,6 +2762,50 @@ class _NotificationTile extends StatelessWidget {
   }
 }
 
+class _TeamInvitationDialog extends StatelessWidget {
+  final AppNotificationModel notification;
+
+  const _TeamInvitationDialog({required this.notification});
+
+  @override
+  Widget build(BuildContext context) {
+    final orgName = notification.metadata['org_name']?.toString() ?? 'equipo';
+    final invitedBy =
+        notification.metadata['invited_by_name']?.toString() ?? 'Taploe';
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Row(
+        children: [
+          const Icon(Icons.groups_rounded, color: TaploeColors.blue),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Invitación de equipo',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        '$invitedBy te invitó a unirte a $orgName. Al aceptar podrás ver la analítica y actividad del equipo.',
+        style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Declinar'),
+        ),
+        TaploeButton(
+          label: 'Aceptar',
+          icon: Icons.check_rounded,
+          width: 132,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+  }
+}
+
 class _EmptyNotifications extends StatelessWidget {
   const _EmptyNotifications();
 
@@ -2695,6 +2849,7 @@ class _EmptyNotifications extends StatelessWidget {
 
 IconData _notificationIcon(String type) {
   return switch (type) {
+    'team_invitation' => Icons.group_add_rounded,
     'lead_created' => Icons.person_add_alt_1_rounded,
     'form_submit' => Icons.dynamic_form_rounded,
     'profile_view' => Icons.visibility_outlined,
@@ -2748,16 +2903,11 @@ class _Sidebar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        backgroundColor: TaploeColors.black,
-                        child: Text(
-                          initials(
-                            user?.username.isNotEmpty == true
-                                ? user!.username
-                                : user?.email ?? 'T',
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                      _UserAvatar(
+                        label: user?.username.isNotEmpty == true
+                            ? user!.username
+                            : user?.email ?? 'T',
+                        imageUrl: taploeState.activeProfile?.profilePhotoUrl,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -5534,7 +5684,7 @@ class _ActivityTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            _relativeTime(event.occurredAt),
+            _fullDateTime12(event.occurredAt),
             style: GoogleFonts.dmSans(color: context.muted, fontSize: 12),
           ),
         ],
@@ -5555,45 +5705,6 @@ String _activityEventLabel(AnalyticsEventModel event) {
       label?.isNotEmpty == true ? 'Click en $label' : 'Click en agenda',
     _ => _eventLabel(event.eventType),
   };
-}
-
-class _RankRow extends StatelessWidget {
-  final String label;
-  final int value;
-  final int max;
-
-  const _RankRow({required this.label, required this.value, required this.max});
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = max == 0 ? 0.0 : value / max;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(flex: 5, child: _ProgressBar(value: progress)),
-          const SizedBox(width: 10),
-          Text(
-            '$value',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.w600,
-              color: context.text,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SmallPill extends StatelessWidget {
@@ -6006,9 +6117,18 @@ String _relativeTime(DateTime? date) {
 
 String _timeOnly(DateTime? date) {
   if (date == null) return '--:--';
-  final hour = date.hour.toString().padLeft(2, '0');
+  final period = date.hour >= 12 ? 'PM' : 'AM';
+  final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final hour = hour12.toString().padLeft(2, '0');
   final minute = date.minute.toString().padLeft(2, '0');
-  return '$hour:$minute';
+  return '$hour:$minute $period';
+}
+
+String _fullDateTime12(DateTime? date) {
+  if (date == null) return '-';
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day/$month/${date.year} ${_timeOnly(date)}';
 }
 
 String _timelineDate(DateTime? date) {
@@ -13276,8 +13396,10 @@ class AnalyticsDashboardView extends StatefulWidget {
 class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
   AnalyticsSummaryModel? data;
   List<AnalyticsEventModel> events = const [];
+  List<TeamMemberModel> members = const [];
   bool loading = true;
   String? _profileId;
+  String _memberFilter = 'all';
 
   @override
   void initState() {
@@ -13299,27 +13421,51 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
 
   Future<void> load() async {
     final p = taploeState.activeProfile;
+    final org = taploeState.organization;
     _profileId = p?.id;
-    if (p == null) {
+    if (org == null && p == null) {
       if (mounted) {
         setState(() {
           data = null;
           events = const [];
+          members = const [];
           loading = false;
         });
       }
       return;
     }
     if (mounted) setState(() => loading = true);
-    final result = await Future.wait<Object>([
-      AnalyticsRepository.fetchSummary(p.id),
-      AnalyticsRepository.fetchRecentEvents(p.id, limit: 8),
-    ]);
-    if (taploeState.activeProfile?.id != p.id) return;
+    late final List<Object> result;
+    if (org != null) {
+      final team = await TeamRepository.fetchTeam(org.id);
+      final selectedOwner = _memberFilter == 'all' ? null : _memberFilter;
+      final profileIds = await TeamRepository.fetchProfileIdsForOrg(
+        org.id,
+        ownerUserId: selectedOwner,
+      );
+      result = await Future.wait<Object>([
+        Future.value(team),
+        AnalyticsRepository.fetchSummaryForProfiles(profileIds),
+        AnalyticsRepository.fetchRecentEventsForProfiles(profileIds, limit: 8),
+      ]);
+    } else {
+      result = await Future.wait<Object>([
+        Future.value(<TeamMemberModel>[]),
+        AnalyticsRepository.fetchSummary(p!.id),
+        AnalyticsRepository.fetchRecentEvents(p.id, limit: 8),
+      ]);
+    }
+    if (org == null && taploeState.activeProfile?.id != p?.id) return;
     if (mounted) {
+      final nextMembers = result[0] as List<TeamMemberModel>;
+      final selectedStillExists =
+          _memberFilter == 'all' ||
+          nextMembers.any((member) => member.id == _memberFilter);
       setState(() {
-        data = result[0] as AnalyticsSummaryModel;
-        events = result[1] as List<AnalyticsEventModel>;
+        members = nextMembers;
+        if (!selectedStillExists) _memberFilter = 'all';
+        data = result[1] as AnalyticsSummaryModel;
+        events = result[2] as List<AnalyticsEventModel>;
         loading = false;
       });
     }
@@ -13333,7 +13479,21 @@ class _AnalyticsDashboardViewState extends State<AnalyticsDashboardView> {
         : d.profileViews + d.linkClicks + d.contactsSaved + d.formSubmits;
     return PageShell(
       title: 'Analítica',
-      subtitle: 'Mide visitas por NFC, QR, link directo, clicks y formularios.',
+      subtitle: taploeState.organization == null
+          ? 'Mide visitas por NFC, QR, link directo, clicks y formularios.'
+          : 'Mide el rendimiento general o filtrado por miembro del equipo.',
+      actions: taploeState.organization == null
+          ? const []
+          : [
+              _TeamMemberFilter(
+                members: members,
+                value: _memberFilter,
+                onChanged: (value) {
+                  setState(() => _memberFilter = value);
+                  load();
+                },
+              ),
+            ],
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : d == null
@@ -13773,7 +13933,7 @@ class _AnalyticsRecentTile extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            _timeOnly(event.occurredAt),
+            _fullDateTime12(event.occurredAt),
             style: GoogleFonts.dmSans(
               color: context.muted,
               fontWeight: FontWeight.w600,
@@ -15494,14 +15654,7 @@ class _LeadTimelineRow extends StatelessWidget {
 }
 
 class _TeamPlanRequestPanel extends StatelessWidget {
-  final String title;
-  final String message;
-
-  const _TeamPlanRequestPanel({
-    this.title = 'Crea un espacio para tu equipo',
-    this.message =
-        'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business. Para activar esta experiencia necesitas solicitar una cotización con el equipo de Taploe.',
-  });
+  const _TeamPlanRequestPanel();
 
   @override
   Widget build(BuildContext context) {
@@ -15517,7 +15670,7 @@ class _TeamPlanRequestPanel extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            title,
+            'Crea un espacio para tu equipo',
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 28,
@@ -15528,7 +15681,7 @@ class _TeamPlanRequestPanel extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 620),
             child: Text(
-              message,
+              'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business. Para activar esta experiencia necesitas solicitar una cotización con el equipo de Taploe.',
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(
                 color: context.muted,
@@ -15827,6 +15980,8 @@ class TeamView extends StatefulWidget {
 
 class _TeamViewState extends State<TeamView> {
   List<TeamMemberModel> members = [];
+  List<TeamActivityModel> activities = [];
+  String selectedMemberId = 'all';
   bool loading = true;
 
   @override
@@ -15845,16 +16000,53 @@ class _TeamViewState extends State<TeamView> {
   Future<void> load() async {
     final org = taploeState.organization;
     if (org == null) {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() {
+          members = const [];
+          activities = const [];
+          loading = false;
+        });
+      }
       return;
     }
-    final rows = await TeamRepository.fetchTeam(org.id);
+    if (mounted) setState(() => loading = true);
+    final ownerUserId = selectedMemberId == 'all' ? null : selectedMemberId;
+    final result = await Future.wait<Object>([
+      TeamRepository.fetchTeam(org.id),
+      TeamRepository.fetchRecentActivity(
+        org.id,
+        ownerUserId: ownerUserId,
+        limit: 8,
+      ),
+    ]);
     if (mounted) {
+      final nextMembers = result[0] as List<TeamMemberModel>;
+      final selectedStillExists =
+          selectedMemberId == 'all' ||
+          nextMembers.any((member) => member.id == selectedMemberId);
       setState(() {
-        members = rows;
+        members = nextMembers;
+        activities = result[1] as List<TeamActivityModel>;
+        if (!selectedStillExists) selectedMemberId = 'all';
         loading = false;
       });
     }
+  }
+
+  Future<void> _openInviteDialog() async {
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _InviteTeamMemberDialog(),
+    );
+    if (sent == true) await load();
+  }
+
+  Future<void> _openCreateCompanyDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _CreateCompanyDialog(),
+    );
+    if (created == true) await load();
   }
 
   @override
@@ -15871,28 +16063,44 @@ class _TeamViewState extends State<TeamView> {
       0,
       (sum, member) => sum + member.profiles,
     );
-    final topViews = members.fold<int>(
-      1,
-      (max, member) => member.views > max ? member.views : max,
+    final totalNfc = members.fold<int>(0, (sum, member) => sum + member.nfc);
+    final totalQr = members.fold<int>(0, (sum, member) => sum + member.qr);
+    final totalClicks = members.fold<int>(
+      0,
+      (sum, member) => sum + member.clicks,
     );
+    TeamMemberModel? selectedMember;
+    for (final member in members) {
+      if (member.id == selectedMemberId) {
+        selectedMember = member;
+        break;
+      }
+    }
     return PageShell(
       title: 'Equipo',
-      subtitle:
-          'Vista por miembro cuando la cuenta pertenece a una organización.',
+      subtitle: 'Gestiona tu equipo y visualiza el rendimiento en conjunto.',
+      actions: [
+        TaploeButton(
+          label: taploeState.organization == null
+              ? 'Crear empresa'
+              : 'Invitar miembro',
+          icon: taploeState.organization == null
+              ? Icons.apartment_rounded
+              : Icons.group_add_rounded,
+          width: 190,
+          onPressed: taploeState.organization == null
+              ? _openCreateCompanyDialog
+              : _openInviteDialog,
+        ),
+      ],
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : taploeState.organization == null
-          ? const _TeamPlanRequestPanel()
-          : members.isEmpty
-          ? const _TeamPlanRequestPanel(
-              title: 'Crea un espacio para tu equipo',
-              message:
-                  'Administra miembros, perfiles, tarjetas y resultados desde Taploe Business.',
-            )
+          ? _NoCompanyTeamPanel(onCreateCompany: _openCreateCompanyDialog)
           : Column(
               children: [
                 GridView.count(
-                  crossAxisCount: context.isWide ? 4 : 2,
+                  crossAxisCount: context.isWide ? 5 : 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 12,
@@ -15900,22 +16108,27 @@ class _TeamViewState extends State<TeamView> {
                   childAspectRatio: context.isWide ? 1.55 : 1.18,
                   children: [
                     _MetricPanel(
-                      label: 'Miembros',
-                      value: '${members.length}',
-                      icon: Icons.groups_outlined,
-                    ),
-                    _MetricPanel(
-                      label: 'Perfiles',
-                      value: '$totalProfiles',
-                      icon: Icons.badge_outlined,
-                    ),
-                    _MetricPanel(
-                      label: 'Vistas',
+                      label: 'Visitas totales',
                       value: '$totalViews',
                       icon: Icons.visibility_outlined,
                     ),
                     _MetricPanel(
-                      label: 'Leads',
+                      label: 'Taps NFC',
+                      value: '$totalNfc',
+                      icon: Icons.nfc_rounded,
+                    ),
+                    _MetricPanel(
+                      label: 'Escaneos QR',
+                      value: '$totalQr',
+                      icon: Icons.qr_code_rounded,
+                    ),
+                    _MetricPanel(
+                      label: 'Clicks totales',
+                      value: '$totalClicks',
+                      icon: Icons.share_rounded,
+                    ),
+                    _MetricPanel(
+                      label: 'Leads generados',
                       value: '$totalLeads',
                       icon: Icons.handshake_outlined,
                     ),
@@ -15931,69 +16144,17 @@ class _TeamViewState extends State<TeamView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PanelHeader(
-                          title: 'Miembros',
-                          icon: Icons.groups_outlined,
-                          trailing: '${members.length} activos',
+                          title: 'Directorio del equipo',
+                          icon: Icons.manage_accounts_outlined,
+                          trailing: '$totalProfiles perfiles',
                         ),
-                        const SizedBox(height: 10),
-                        ...members.map((m) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(color: TaploeColors.border),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: TaploeColors.black,
-                                  child: Text(
-                                    initials(m.name),
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        m.name,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${m.role} · ${m.email}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.dmSans(
-                                          color: context.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    _SmallPill(
-                                      label: '${m.profiles} perfiles',
-                                      icon: Icons.badge_outlined,
-                                    ),
-                                    _SmallPill(
-                                      label: '${m.leads} leads',
-                                      icon: Icons.handshake_outlined,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
+                        const SizedBox(height: 26),
+                        if (members.isEmpty)
+                          const _MutedText(
+                            'Aún no hay miembros activos en esta empresa.',
+                          )
+                        else
+                          _TeamMembersTable(members: members),
                       ],
                     ),
                   ),
@@ -16001,25 +16162,41 @@ class _TeamViewState extends State<TeamView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _PanelHeader(
-                          title: 'Rendimiento',
-                          icon: Icons.leaderboard_outlined,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PanelHeader(
+                                title: 'Actividad del equipo',
+                                icon: Icons.receipt_long_outlined,
+                              ),
+                            ),
+                            _TeamMemberFilter(
+                              members: members,
+                              value: selectedMemberId,
+                              onChanged: (value) {
+                                setState(() => selectedMemberId = value);
+                                load();
+                              },
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 14),
-                        ...members.map(
-                          (m) => _RankRow(
-                            label: m.name,
-                            value: m.views,
-                            max: topViews,
+                        const SizedBox(height: 8),
+                        Text(
+                          selectedMember == null
+                              ? 'Últimas interacciones registradas.'
+                              : 'Actividad de ${selectedMember.name}.',
+                          style: GoogleFonts.dmSans(
+                            color: context.muted,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const Divider(height: 24),
-                        _InsightChip(
-                          label: totalProfiles == 0
-                              ? 'Crea perfiles para medir resultados por persona'
-                              : '$totalProfiles perfiles administrados',
-                          icon: Icons.insights_rounded,
-                        ),
+                        const SizedBox(height: 16),
+                        if (activities.isEmpty)
+                          const _MutedText('Sin actividad reciente.')
+                        else
+                          ...activities.map(
+                            (activity) => _TeamActivityTile(activity: activity),
+                          ),
                       ],
                     ),
                   ),
@@ -16028,6 +16205,892 @@ class _TeamViewState extends State<TeamView> {
             ),
     );
   }
+}
+
+class _NoCompanyTeamPanel extends StatelessWidget {
+  final VoidCallback onCreateCompany;
+
+  const _NoCompanyTeamPanel({required this.onCreateCompany});
+
+  @override
+  Widget build(BuildContext context) {
+    return TaploePanel(
+      radius: 24,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.apartment_rounded,
+              color: TaploeColors.blue,
+              size: 42,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Sin empresa activa',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                color: context.text,
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Crea tu empresa para invitar miembros y ver analítica de equipo.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 22),
+            TaploeButton(
+              label: 'Crear empresa',
+              icon: Icons.add_business_rounded,
+              width: 190,
+              onPressed: onCreateCompany,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreateCompanyDialog extends StatefulWidget {
+  const _CreateCompanyDialog();
+
+  @override
+  State<_CreateCompanyDialog> createState() => _CreateCompanyDialogState();
+}
+
+class _CreateCompanyDialogState extends State<_CreateCompanyDialog> {
+  final name = TextEditingController();
+  Uint8List? logoBytes;
+  String? logoFileName;
+  CompanyLogoDropSubscription? logoDrop;
+  bool saving = false;
+  bool draggingLogo = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    logoDrop = CompanyLogoDropSubscription(
+      onDropped: (file) {
+        if (!mounted || saving) return;
+        setState(() {
+          logoBytes = file.bytes;
+          logoFileName = file.name;
+          draggingLogo = false;
+          error = null;
+        });
+      },
+      onDragActive: (active) {
+        if (!mounted) return;
+        setState(() => draggingLogo = active);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    logoDrop?.dispose();
+    name.dispose();
+    super.dispose();
+  }
+
+  Future<void> pickLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      allowMultiple: false,
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+    setState(() {
+      logoBytes = bytes;
+      logoFileName = file.name;
+      error = null;
+    });
+  }
+
+  Future<void> submit() async {
+    final user = taploeState.currentUser;
+    if (user == null) return;
+    if (name.text.trim().length < 2) {
+      setState(() => error = 'Escribe el nombre de la empresa.');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      final authUserId = taploeState.client.auth.currentUser?.id;
+      String? logoUrl;
+      if (logoBytes != null) {
+        if (authUserId == null) throw Exception('No hay sesión activa.');
+        logoUrl = await OrganizationAssetRepository.uploadCompanyLogo(
+          authUserId: authUserId,
+          bytes: logoBytes!,
+          fileName: logoFileName ?? 'company-logo.jpg',
+        );
+      }
+      await OrganizationRepository.createCompanyForOwner(
+        owner: user,
+        name: name.text,
+        logoUrl: logoUrl,
+      );
+      await taploeState.bootstrap();
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      taploeToast(context, 'Empresa creada.');
+    } on ArgumentError {
+      if (mounted) {
+        setState(() => error = 'Escribe el nombre de la empresa.');
+      }
+    } on PostgrestException catch (e) {
+      safePrintError(e);
+      if (mounted) {
+        setState(() {
+          error = e.code == '42501'
+              ? 'Falta aplicar las políticas RLS para crear empresas.'
+              : 'No pudimos crear la empresa.';
+        });
+      }
+    } catch (e) {
+      safePrintError(e);
+      if (mounted) {
+        setState(() => error = 'No pudimos crear la empresa.');
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: Padding(
+          padding: const EdgeInsets.all(26),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.add_business_rounded,
+                      color: TaploeColors.blue,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Crear empresa',
+                        style: GoogleFonts.outfit(
+                          color: context.text,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: saving ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tu usuario quedará como administrador principal de esta empresa.',
+                  style: GoogleFonts.dmSans(color: context.muted),
+                ),
+                const SizedBox(height: 20),
+                if (error != null) ...[
+                  Text(
+                    error!,
+                    style: GoogleFonts.dmSans(
+                      color: TaploeColors.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _CompanyLogoPicker(
+                  bytes: logoBytes,
+                  fileName: logoFileName,
+                  dragging: draggingLogo,
+                  onPick: saving ? null : pickLogo,
+                  onRemove: saving
+                      ? null
+                      : () {
+                          setState(() {
+                            logoBytes = null;
+                            logoFileName = null;
+                          });
+                        },
+                ),
+                const SizedBox(height: 16),
+                TaploeTextField(label: 'Nombre de empresa *', controller: name),
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TaploeButton(
+                      label: 'Cancelar',
+                      kind: TaploeButtonKind.secondary,
+                      width: 120,
+                      onPressed: saving ? null : () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 12),
+                    TaploeButton(
+                      label: 'Crear empresa',
+                      icon: Icons.check_rounded,
+                      width: 220,
+                      loading: saving,
+                      onPressed: submit,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompanyLogoPicker extends StatefulWidget {
+  final Uint8List? bytes;
+  final String? fileName;
+  final bool dragging;
+  final VoidCallback? onPick;
+  final VoidCallback? onRemove;
+
+  const _CompanyLogoPicker({
+    required this.bytes,
+    required this.fileName,
+    required this.dragging,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  @override
+  State<_CompanyLogoPicker> createState() => _CompanyLogoPickerState();
+}
+
+class _CompanyLogoPickerState extends State<_CompanyLogoPicker> {
+  bool hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLogo = widget.bytes != null;
+    final active = hovering || widget.dragging;
+    final borderColor = active
+        ? TaploeColors.blue
+        : TaploeColors.blue.withValues(alpha: .32);
+    return MouseRegion(
+      cursor: widget.onPick == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      onEnter: (_) => setState(() => hovering = true),
+      onExit: (_) => setState(() => hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPick,
+        child: CustomPaint(
+          painter: _DashedRoundRectPainter(
+            color: borderColor,
+            strokeWidth: active ? 2.2 : 1.8,
+            radius: 18,
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: double.infinity,
+            constraints: const BoxConstraints(minHeight: 168),
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+            decoration: BoxDecoration(
+              color: active
+                  ? TaploeColors.blue.withValues(alpha: .065)
+                  : TaploeColors.blue.withValues(alpha: .025),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.upload_rounded,
+                  color: TaploeColors.blue,
+                  size: active ? 48 : 44,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.dragging
+                      ? 'Suelta tu logo aquí'
+                      : 'Arrastra tu logo o selecciónalo',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(
+                    color: context.text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  'PNG, JPG o WebP · máximo 5 MB',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (hasLogo) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TaploeColors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: TaploeColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: TaploeColors.border),
+                          ),
+                          child: Image.memory(widget.bytes!, fit: BoxFit.cover),
+                        ),
+                        const SizedBox(width: 9),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 260),
+                          child: Text(
+                            widget.fileName ?? 'Logo seleccionado',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              color: context.text,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: IconButton(
+                            tooltip: 'Quitar logo',
+                            padding: EdgeInsets.zero,
+                            onPressed: widget.onRemove,
+                            icon: const Icon(Icons.close_rounded, size: 19),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRoundRectPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double radius;
+
+  const _DashedRoundRectPainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.radius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          rect.deflate(strokeWidth / 2),
+          Radius.circular(radius),
+        ),
+      );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    const dash = 7.0;
+    const gap = 7.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRoundRectPainter oldDelegate) {
+    return color != oldDelegate.color ||
+        strokeWidth != oldDelegate.strokeWidth ||
+        radius != oldDelegate.radius;
+  }
+}
+
+class _InviteTeamMemberDialog extends StatefulWidget {
+  const _InviteTeamMemberDialog();
+
+  @override
+  State<_InviteTeamMemberDialog> createState() =>
+      _InviteTeamMemberDialogState();
+}
+
+class _InviteTeamMemberDialogState extends State<_InviteTeamMemberDialog> {
+  final destination = TextEditingController();
+  String role = 'member';
+  bool saving = false;
+  String? error;
+
+  @override
+  void dispose() {
+    destination.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    final org = taploeState.organization;
+    final user = taploeState.currentUser;
+    if (org == null || user == null) return;
+    if (destination.text.trim().isEmpty) {
+      setState(() => error = 'Escribe un correo o nombre de usuario.');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      await TeamRepository.inviteMember(
+        org: org,
+        invitedBy: user,
+        emailOrUsername: destination.text,
+        role: role,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      taploeToast(context, 'Invitación enviada.');
+    } on TeamInviteException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        error = switch (e.code) {
+          'user_not_found' =>
+            'No existe un usuario con ese correo o nombre de usuario.',
+          'cannot_invite_self' => 'No puedes invitarte a ti mismo.',
+          'already_member' => 'Este usuario ya pertenece a la empresa.',
+          'already_invited' =>
+            'Este usuario ya tiene una invitación pendiente.',
+          _ => 'No pudimos enviar la invitación.',
+        };
+      });
+    } catch (e) {
+      safePrintError(e);
+      if (mounted) {
+        setState(() => error = 'No pudimos enviar la invitación.');
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.group_add_rounded, color: TaploeColors.blue),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Invitar miembro',
+                      style: GoogleFonts.outfit(
+                        color: context.text,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: saving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Envía una invitación a un usuario existente por correo o username.',
+                style: GoogleFonts.dmSans(color: context.muted),
+              ),
+              const SizedBox(height: 20),
+              if (error != null) ...[
+                Text(
+                  error!,
+                  style: GoogleFonts.dmSans(
+                    color: TaploeColors.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              TaploeTextField(
+                label: 'Correo o nombre de usuario',
+                hint: 'ana@empresa.com o ana-lopez',
+                controller: destination,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 14),
+              _RoleDropdown(
+                value: role,
+                onChanged: (value) => setState(() => role = value),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TaploeButton(
+                    label: 'Cancelar',
+                    kind: TaploeButtonKind.secondary,
+                    width: 120,
+                    onPressed: saving ? null : () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 12),
+                  TaploeButton(
+                    label: 'Enviar invitación',
+                    icon: Icons.send_rounded,
+                    width: 210,
+                    loading: saving,
+                    onPressed: submit,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _RoleDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const roles = {
+      'member': 'Miembro',
+      'admin': 'Administrador',
+      'viewer': 'Solo lectura',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Rol',
+          style: GoogleFonts.dmSans(
+            color: context.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 54,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: TaploeColors.white,
+            borderRadius: BorderRadius.circular(TaploeRadius.input),
+            border: Border.all(color: TaploeColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              items: roles.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (next) {
+                if (next != null) onChanged(next);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeamMemberFilter extends StatelessWidget {
+  final List<TeamMemberModel> members;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _TeamMemberFilter({
+    required this.members,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+        borderRadius: BorderRadius.circular(14),
+        items: [
+          const DropdownMenuItem(value: 'all', child: Text('Todos')),
+          ...members.map(
+            (member) => DropdownMenuItem(
+              value: member.id,
+              child: Text(member.name, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ],
+        onChanged: (next) {
+          if (next != null) onChanged(next);
+        },
+      ),
+    );
+  }
+}
+
+class _TeamMembersTable extends StatelessWidget {
+  final List<TeamMemberModel> members;
+
+  const _TeamMembersTable({required this.members});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowColor: WidgetStateProperty.all(TaploeColors.page),
+        headingRowHeight: 58,
+        dataRowMinHeight: 68,
+        dataRowMaxHeight: 76,
+        columnSpacing: 30,
+        columns: const [
+          DataColumn(label: Text('Miembro')),
+          DataColumn(label: Text('Rol')),
+          DataColumn(label: Text('Perfiles')),
+          DataColumn(label: Text('Tarjetas')),
+          DataColumn(label: Text('Última actividad')),
+          DataColumn(label: Text('Estado')),
+        ],
+        rows: members
+            .map(
+              (member) => DataRow(
+                cells: [
+                  DataCell(
+                    Row(
+                      children: [
+                        _UserAvatar(
+                          radius: 18,
+                          fontSize: 12,
+                          label: member.name,
+                          imageUrl: member.avatarUrl,
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 180,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                member.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.dmSans(
+                                  color: context.text,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                member.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.dmSans(
+                                  color: context.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  DataCell(Text(_teamRoleLabel(member.role))),
+                  DataCell(Text('${member.profiles}')),
+                  DataCell(Text('${member.cards}')),
+                  DataCell(
+                    Text(member.views + member.clicks == 0 ? '-' : 'Hoy'),
+                  ),
+                  DataCell(
+                    const _StatusPill(
+                      label: 'Activo',
+                      color: Color(0xFF16A34A),
+                    ),
+                  ),
+                ],
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamActivityTile extends StatelessWidget {
+  final TeamActivityModel activity;
+
+  const _TeamActivityTile({required this.activity});
+
+  @override
+  Widget build(BuildContext context) {
+    final event = activity.event;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AnalyticsEventIcon(event: event),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${activity.memberName} · ${_analyticsRecentTitle(event)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: context.text,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  activity.profileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _fullDateTime12(event.occurredAt),
+            textAlign: TextAlign.right,
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _teamRoleLabel(String role) {
+  return switch (role) {
+    'owner' => 'Owner',
+    'admin' => 'Administrador',
+    'viewer' => 'Solo lectura',
+    _ => 'Miembro',
+  };
 }
 
 class AdminView extends StatefulWidget {

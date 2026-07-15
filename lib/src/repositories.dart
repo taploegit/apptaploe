@@ -61,6 +61,57 @@ class ProfileAssetRepository {
   }
 }
 
+class OrganizationAssetRepository {
+  static const bucket = 'company-logos';
+
+  static Future<String> uploadCompanyLogo({
+    required String authUserId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final extension = _extensionFrom(fileName);
+    final contentType = _contentTypeFor(extension);
+    final path =
+        '$authUserId/logo-${DateTime.now().millisecondsSinceEpoch}.$extension';
+
+    debugPrint('[TaploeStorage] Uploading $bucket/$path');
+
+    await _db.storage
+        .from(bucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
+        );
+
+    return _db.storage.from(bucket).getPublicUrl(path);
+  }
+
+  static String _extensionFrom(String fileName) {
+    final clean = fileName.toLowerCase().split('?').first;
+    final parts = clean.split('.');
+    if (parts.length < 2) return 'jpg';
+    final ext = parts.last;
+    if (ext == 'jpeg' || ext == 'jpg' || ext == 'png' || ext == 'webp') {
+      return ext;
+    }
+    return 'jpg';
+  }
+
+  static String _contentTypeFor(String extension) {
+    switch (extension) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'jpeg':
+      case 'jpg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+}
+
 class SessionStorage {
   static const _pendingActivationTokenKey = 'taploe.pendingActivationToken';
   static const _lastAccessPointIdKey = 'taploe.lastAccessPointId';
@@ -165,6 +216,15 @@ class NotificationRepository {
       safePrintError(error);
     }
   }
+}
+
+class TeamInviteException implements Exception {
+  final String code;
+
+  const TeamInviteException(this.code);
+
+  @override
+  String toString() => code;
 }
 
 class QuoteRequestRepository {
@@ -443,6 +503,72 @@ class UserRepository {
 }
 
 class OrganizationRepository {
+  static Future<bool> slugExists(String slug) async {
+    final clean = normalizePublicSlug(slug);
+    if (clean.isEmpty) return false;
+    final rows = await _db
+        .from('organizations')
+        .select('id')
+        .eq('slug', clean)
+        .limit(1);
+    return rows.isNotEmpty;
+  }
+
+  static Future<String> generateUniqueSlug(String base) async {
+    final slugBase = slugify(base);
+    var slug = slugBase;
+    var i = 1;
+    while (await slugExists(slug)) {
+      slug = '$slugBase-$i';
+      i++;
+    }
+    return slug;
+  }
+
+  static Future<OrganizationModel> createCompanyForOwner({
+    required AppUserModel owner,
+    required String name,
+    String? logoUrl,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.length < 2) {
+      throw ArgumentError('company_name_too_short');
+    }
+
+    final slug = await generateUniqueSlug(cleanName);
+    final orgRow = await _db
+        .from('organizations')
+        .insert({
+          'name': cleanName,
+          'slug': slug,
+          'company_logo_url': logoUrl?.trim().isEmpty == true
+              ? null
+              : logoUrl?.trim(),
+          'plan_type': 'business',
+          'created_by_user_id': owner.id,
+          'updated_at': nowIso(),
+        })
+        .select()
+        .single();
+
+    final org = OrganizationModel.fromJson(Map<String, dynamic>.from(orgRow));
+    await _db.from('organization_members').insert({
+      'org_id': org.id,
+      'user_id': owner.id,
+      'role': 'owner',
+      'status': 'active',
+      'joined_at': nowIso(),
+    });
+
+    await _db
+        .from('digital_profiles')
+        .update({'org_id': org.id, 'updated_at': nowIso()})
+        .eq('owner_user_id', owner.id)
+        .isFilter('org_id', null);
+
+    return org;
+  }
+
   static Future<OrganizationSummaryModel> fetchSummary(
     OrganizationModel org,
   ) async {
@@ -1375,6 +1501,88 @@ class AnalyticsRepository {
     );
   }
 
+  static Future<AnalyticsSummaryModel> fetchSummaryForProfiles(
+    List<String> profileIds,
+  ) async {
+    if (profileIds.isEmpty) {
+      return const AnalyticsSummaryModel(
+        profileViews: 0,
+        nfcViews: 0,
+        qrViews: 0,
+        directViews: 0,
+        linkClicks: 0,
+        contactsSaved: 0,
+        formSubmits: 0,
+        viewsByDay: [0, 0, 0, 0, 0, 0, 0],
+        clicksByLabel: {},
+      );
+    }
+
+    final since = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .toUtc()
+        .toIso8601String();
+    final rows = await _db
+        .from('analytics_events')
+        .select('*, profile_links(label)')
+        .inFilter('profile_id', profileIds)
+        .gte('occurred_at', since)
+        .order('occurred_at');
+
+    return _summaryFromRows(rows as List);
+  }
+
+  static AnalyticsSummaryModel _summaryFromRows(List rows) {
+    int views = 0,
+        nfc = 0,
+        qr = 0,
+        direct = 0,
+        clicks = 0,
+        saves = 0,
+        forms = 0;
+    final byDay = List<int>.filled(7, 0);
+    final clickLabels = <String, int>{};
+    final now = DateTime.now();
+
+    for (final raw in rows) {
+      final e = Map<String, dynamic>.from(raw as Map);
+      final type = e['event_type'] as String? ?? '';
+      final channel = e['access_channel'] as String? ?? 'direct';
+      final occurred = DateTime.tryParse('${e['occurred_at']}')?.toLocal();
+
+      if (type == 'profile_view') {
+        views++;
+        if (channel == 'nfc') nfc++;
+        if (channel == 'qr') qr++;
+        if (channel == 'direct') direct++;
+        if (occurred != null) {
+          final diff = now.difference(occurred).inDays;
+          if (diff >= 0 && diff < 7) byDay[6 - diff]++;
+        }
+      }
+      if (type == 'link_click' || type == 'calendar_click') {
+        clicks++;
+        final link = e['profile_links'];
+        final label = link is Map ? '${link['label'] ?? 'Link'}' : 'Link';
+        clickLabels[label] = (clickLabels[label] ?? 0) + 1;
+      }
+      if (type == 'contact_save') saves++;
+      if (type == 'form_submit') forms++;
+    }
+
+    return AnalyticsSummaryModel(
+      profileViews: views,
+      nfcViews: nfc,
+      qrViews: qr,
+      directViews: direct,
+      linkClicks: clicks,
+      contactsSaved: saves,
+      formSubmits: forms,
+      viewsByDay: byDay,
+      clicksByLabel: clickLabels,
+    );
+  }
+
   static Future<List<AnalyticsEventModel>> fetchRecentEvents(
     String profileId, {
     int limit = 8,
@@ -1386,6 +1594,27 @@ class AnalyticsRepository {
           'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,city,region,country,metadata,occurred_at,profile_links(label)',
         )
         .eq('profile_id', profileId)
+        .order('occurred_at', ascending: false)
+        .limit(queryLimit);
+    return (rows as List)
+        .map((e) => AnalyticsEventModel.fromJson(Map<String, dynamic>.from(e)))
+        .where((event) => !_isLegacyProfileInstallEvent(event.eventType))
+        .take(limit)
+        .toList();
+  }
+
+  static Future<List<AnalyticsEventModel>> fetchRecentEventsForProfiles(
+    List<String> profileIds, {
+    int limit = 8,
+  }) async {
+    if (profileIds.isEmpty) return const [];
+    final queryLimit = limit < 20 ? 40 : limit * 2;
+    final rows = await _db
+        .from('analytics_events')
+        .select(
+          'id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,city,region,country,metadata,occurred_at,profile_links(label)',
+        )
+        .inFilter('profile_id', profileIds)
         .order('occurred_at', ascending: false)
         .limit(queryLimit);
     return (rows as List)
@@ -1830,6 +2059,249 @@ class IntegrationRepository {
 }
 
 class TeamRepository {
+  static Future<AppUserModel?> findUserByEmailOrUsername(String value) async {
+    final query = value.trim().toLowerCase();
+    if (query.isEmpty) return null;
+    final column = query.contains('@') ? 'email' : 'username';
+    final normalized = column == 'username'
+        ? UserRepository.normalizeUsername(query)
+        : query;
+    final row = await _db
+        .from('app_users')
+        .select()
+        .eq(column, normalized)
+        .maybeSingle();
+    if (row == null) return null;
+    return AppUserModel.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  static Future<void> inviteMember({
+    required OrganizationModel org,
+    required AppUserModel invitedBy,
+    required String emailOrUsername,
+    String role = 'member',
+  }) async {
+    final invitedUser = await findUserByEmailOrUsername(emailOrUsername);
+    if (invitedUser == null) {
+      throw const TeamInviteException('user_not_found');
+    }
+    if (invitedUser.id == invitedBy.id) {
+      throw const TeamInviteException('cannot_invite_self');
+    }
+
+    final activeMembership = await _db
+        .from('organization_members')
+        .select('id')
+        .eq('org_id', org.id)
+        .eq('user_id', invitedUser.id)
+        .eq('status', 'active')
+        .maybeSingle();
+    if (activeMembership != null) {
+      throw const TeamInviteException('already_member');
+    }
+
+    final existingInvite = await _db
+        .from('organization_invitations')
+        .select('id,status')
+        .eq('org_id', org.id)
+        .eq('invited_user_id', invitedUser.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+    if (existingInvite != null) {
+      throw const TeamInviteException('already_invited');
+    }
+
+    final invitation = await _db
+        .from('organization_invitations')
+        .insert({
+          'org_id': org.id,
+          'invited_user_id': invitedUser.id,
+          'invited_by_user_id': invitedBy.id,
+          'role': role,
+          'status': 'pending',
+        })
+        .select()
+        .single();
+
+    await _db.from('app_notifications').insert({
+      'user_id': invitedUser.id,
+      'notification_type': 'team_invitation',
+      'title': 'Invitación a ${org.name}',
+      'body': '${invitedBy.username} te invitó a unirte a su equipo.',
+      'action_url': '/team',
+      'metadata': {
+        'invitation_id': invitation['id'],
+        'org_id': org.id,
+        'org_name': org.name,
+        'invited_by_user_id': invitedBy.id,
+        'invited_by_name': invitedBy.username,
+        'role': role,
+        'status': 'pending',
+      },
+    });
+  }
+
+  static Future<TeamInvitationModel?> fetchInvitation(
+    String invitationId,
+  ) async {
+    final row = await _db
+        .from('organization_invitations')
+        .select()
+        .eq('id', invitationId)
+        .maybeSingle();
+    if (row == null) return null;
+    return TeamInvitationModel.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  static Future<void> respondToInvitation({
+    required String invitationId,
+    required AppUserModel user,
+    required bool accept,
+  }) async {
+    final invitation = await fetchInvitation(invitationId);
+    if (invitation == null || invitation.invitedUserId != user.id) {
+      throw const TeamInviteException('invitation_not_found');
+    }
+    if (invitation.status != 'pending') {
+      throw const TeamInviteException('invitation_resolved');
+    }
+
+    if (accept) {
+      await _db.from('organization_members').upsert({
+        'org_id': invitation.orgId,
+        'user_id': user.id,
+        'role': invitation.role,
+        'status': 'active',
+        'invited_by_user_id': invitation.invitedByUserId,
+        'joined_at': nowIso(),
+      }, onConflict: 'org_id,user_id');
+
+      await _db
+          .from('digital_profiles')
+          .update({'org_id': invitation.orgId, 'updated_at': nowIso()})
+          .eq('owner_user_id', user.id)
+          .isFilter('org_id', null);
+    }
+
+    await _db
+        .from('organization_invitations')
+        .update({
+          'status': accept ? 'accepted' : 'declined',
+          'responded_at': nowIso(),
+        })
+        .eq('id', invitationId);
+
+    await _db
+        .from('app_notifications')
+        .update({
+          'read_at': nowIso(),
+          'metadata': {
+            'invitation_id': invitationId,
+            'org_id': invitation.orgId,
+            'role': invitation.role,
+            'status': accept ? 'accepted' : 'declined',
+          },
+        })
+        .eq('user_id', user.id)
+        .eq('notification_type', 'team_invitation')
+        .contains('metadata', {'invitation_id': invitationId});
+  }
+
+  static Future<List<String>> fetchProfileIdsForOrg(
+    String orgId, {
+    String? ownerUserId,
+  }) async {
+    var query = _db
+        .from('digital_profiles')
+        .select('id')
+        .eq('org_id', orgId)
+        .neq('status', 'deleted');
+    if (ownerUserId != null) query = query.eq('owner_user_id', ownerUserId);
+    final rows = await query;
+    return (rows as List)
+        .map((row) => (row as Map)['id'])
+        .whereType<String>()
+        .toList();
+  }
+
+  static Future<List<TeamActivityModel>> fetchRecentActivity(
+    String orgId, {
+    String? ownerUserId,
+    int limit = 8,
+  }) async {
+    var profilesQuery = _db
+        .from('digital_profiles')
+        .select('id,owner_user_id,display_name,profile_name')
+        .eq('org_id', orgId)
+        .neq('status', 'deleted');
+    if (ownerUserId != null) {
+      profilesQuery = profilesQuery.eq('owner_user_id', ownerUserId);
+    }
+    final profiles = await profilesQuery;
+    final profileRows = (profiles as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    final profileIds = profileRows
+        .map((row) => row['id'])
+        .whereType<String>()
+        .toList();
+    if (profileIds.isEmpty) return const [];
+
+    final users = await _db
+        .from('app_users')
+        .select('id,username,email')
+        .inFilter(
+          'id',
+          profileRows
+              .map((row) => row['owner_user_id'])
+              .whereType<String>()
+              .toSet()
+              .toList(),
+        );
+    final usersById = {
+      for (final raw in users as List)
+        (raw as Map)['id'] as String: Map<String, dynamic>.from(raw),
+    };
+    final profilesById = {
+      for (final row in profileRows) row['id'] as String: row,
+    };
+
+    final rows = await _db
+        .from('analytics_events')
+        .select(
+          'id,profile_id,lead_id,link_id,form_id,form_submission_id,event_type,access_channel,city,region,country,metadata,occurred_at,profile_links(label)',
+        )
+        .inFilter('profile_id', profileIds)
+        .order('occurred_at', ascending: false)
+        .limit(limit * 2);
+
+    return (rows as List)
+        .map((raw) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final profile = profilesById[row['profile_id']];
+          final ownerId = profile?['owner_user_id'] as String?;
+          final user = ownerId == null ? null : usersById[ownerId];
+          return TeamActivityModel(
+            event: AnalyticsEventModel.fromJson(row),
+            memberName:
+                user?['username'] as String? ??
+                user?['email'] as String? ??
+                'Miembro',
+            profileName:
+                profile?['display_name'] as String? ??
+                profile?['profile_name'] as String? ??
+                'perfil',
+          );
+        })
+        .where(
+          (activity) => !AnalyticsRepository._isLegacyProfileInstallEvent(
+            activity.event.eventType,
+          ),
+        )
+        .take(limit)
+        .toList();
+  }
+
   static Future<List<TeamMemberModel>> fetchTeam(String orgId) async {
     final memberships = await _db
         .from('organization_members')
@@ -1847,7 +2319,7 @@ class TeamRepository {
     final users = await _db.from('app_users').select().inFilter('id', userIds);
     final profiles = await _db
         .from('digital_profiles')
-        .select('id, owner_user_id')
+        .select('id, owner_user_id, profile_photo_url, is_default, created_at')
         .eq('org_id', orgId);
 
     final profileIds = (profiles as List)
@@ -1888,6 +2360,27 @@ class TeamRepository {
           .map((p) => (p as Map)['id'])
           .whereType<String>()
           .toSet();
+      final memberProfiles =
+          (profiles)
+              .where((p) => (p as Map)['owner_user_id'] == id)
+              .map((p) => Map<String, dynamic>.from(p as Map))
+              .toList()
+            ..sort((a, b) {
+              final aDefault = a['is_default'] == true ? 0 : 1;
+              final bDefault = b['is_default'] == true ? 0 : 1;
+              if (aDefault != bDefault) return aDefault.compareTo(bDefault);
+              return '${a['created_at'] ?? ''}'.compareTo(
+                '${b['created_at'] ?? ''}',
+              );
+            });
+      String? profileAvatar;
+      for (final profile in memberProfiles) {
+        final url = profile['profile_photo_url'] as String?;
+        if (url?.trim().isNotEmpty == true) {
+          profileAvatar = url;
+          break;
+        }
+      }
       final views = events
           .where(
             (e) =>
@@ -1932,7 +2425,7 @@ class TeamRepository {
         name: user['username'] as String? ?? user['full_name'] as String? ?? '',
         email: user['email'] as String? ?? '',
         role: roleRaw['role'] as String? ?? 'member',
-        avatarUrl: user['avatar_url'] as String?,
+        avatarUrl: profileAvatar ?? user['avatar_url'] as String?,
         profiles: pIds.length,
         views: views,
         nfc: nfc,
