@@ -47,6 +47,11 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script>
+    window.addEventListener('webglcontextlost', function (event) {
+      event.preventDefault();
+    }, true);
+  </script>
+  <script>
     window.taploeDeferredInstallPrompt = null;
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
@@ -60,10 +65,24 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
+        var isLocalhost =
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1';
+
+        if (isLocalhost) {
+          navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            registrations.forEach(function (registration) {
+              registration.unregister();
+            });
+          });
+          return;
+        }
+
         navigator.serviceWorker.register('/taploe-pwa-service-worker.js');
       });
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

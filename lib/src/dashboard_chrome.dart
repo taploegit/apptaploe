@@ -40,8 +40,8 @@ class TaploeDashboardSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = taploeState.currentUser;
-    final name = user?.fullName.isNotEmpty == true
-        ? user!.fullName
+    final name = user?.username.isNotEmpty == true
+        ? user!.username
         : user?.email ?? 'Taploe';
 
     return Container(
@@ -565,8 +565,8 @@ class TaploeDashboardHeader extends StatelessWidget {
               backgroundColor: TaploeColors.black,
               child: Text(
                 initials(
-                  taploeState.currentUser?.fullName.isNotEmpty == true
-                      ? taploeState.currentUser!.fullName
+                  taploeState.currentUser?.username.isNotEmpty == true
+                      ? taploeState.currentUser!.username
                       : taploeState.currentUser?.email ?? 'T',
                 ),
                 style: const TextStyle(
@@ -687,8 +687,8 @@ class TaploeMobileHeader extends StatelessWidget
           backgroundColor: TaploeColors.black,
           child: Text(
             initials(
-              taploeState.currentUser?.fullName.isNotEmpty == true
-                  ? taploeState.currentUser!.fullName
+              taploeState.currentUser?.username.isNotEmpty == true
+                  ? taploeState.currentUser!.username
                   : taploeState.currentUser?.email ?? 'T',
             ),
             style: const TextStyle(

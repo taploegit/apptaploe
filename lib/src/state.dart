@@ -22,8 +22,7 @@ class TaploeState extends ChangeNotifier {
 
   bool get signedIn => client.auth.currentUser != null && currentUser != null;
   bool get hasLinkedCard => cards.any(_isLinkedCard);
-  bool get canAccessDashboard =>
-      signedIn && hasLinkedCard && activeProfile != null;
+  bool get canAccessDashboard => signedIn && activeProfile != null;
 
   void startAuthListener() {
     _authSubscription ??= client.auth.onAuthStateChange.listen((data) {

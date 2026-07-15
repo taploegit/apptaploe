@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
@@ -54,6 +55,7 @@ enum DashboardSection {
 class _DashboardViewState extends State<DashboardView> {
   late DashboardSection section;
   bool _entryDialogShown = false;
+  bool _showInitialCardLinkPrompt = false;
 
   @override
   void initState() {
@@ -82,6 +84,7 @@ class _DashboardViewState extends State<DashboardView> {
   void _maybeShowEntryDialog() {
     if (!mounted || _entryDialogShown) return;
     if (taploeState.bootstrapping || !taploeState.canAccessDashboard) return;
+    if (_showInitialCardLinkPrompt && !taploeState.hasLinkedCard) return;
     _entryDialogShown = true;
     showDialog<void>(
       context: context,
@@ -97,8 +100,24 @@ class _DashboardViewState extends State<DashboardView> {
     }
 
     if (!taploeState.canAccessDashboard) {
-      return _CardRequiredView(
+      return _ProfileRequiredView(
+        onProfileCreated: (profile) {
+          if (!context.mounted) return;
+          setState(() {
+            section = DashboardSection.profile;
+            _showInitialCardLinkPrompt = !taploeState.hasLinkedCard;
+          });
+        },
+      );
+    }
+
+    if (_showInitialCardLinkPrompt && !taploeState.hasLinkedCard) {
+      return _InitialCardLinkView(
         onLinkCard: () => _showCardLinkingDialog(context),
+        onSkip: () {
+          setState(() => _showInitialCardLinkPrompt = false);
+          context.go('/profile');
+        },
       );
     }
 
@@ -210,7 +229,9 @@ class _DashboardEntryDialog extends StatefulWidget {
 
 class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
   _EntryDialogPlan? plan;
+  _EntryDialogPlan? comparisonCheckoutPlan;
   _EntryBillingCycle billingCycle = _EntryBillingCycle.annual;
+  bool showPlanComparison = true;
   bool checkout = false;
 
   void _selectPlan(_EntryDialogPlan value) {
@@ -228,6 +249,10 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
   }
 
   void _goBack() {
+    if (showPlanComparison) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (checkout) {
       setState(() {
         checkout = false;
@@ -248,6 +273,46 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 760;
+    if (showPlanComparison) {
+      final checkoutPlan = comparisonCheckoutPlan;
+      if (checkoutPlan != null) {
+        return Dialog.fullscreen(
+          backgroundColor: TaploeColors.white,
+          child: _EntryPlanCheckoutView(
+            mobile: mobile,
+            plan: checkoutPlan,
+            billingCycle: billingCycle,
+            onBillingCycleChanged: (value) {
+              setState(() => billingCycle = value);
+            },
+            onBack: () => setState(() => comparisonCheckoutPlan = null),
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      }
+
+      return Dialog.fullscreen(
+        backgroundColor: TaploeColors.white,
+        child: _EntryPlanComparisonView(
+          mobile: mobile,
+          onSkip: () => setState(() => showPlanComparison = false),
+          onFree: () => Navigator.of(context).pop(),
+          onPremium: () {
+            setState(() {
+              comparisonCheckoutPlan = _EntryDialogPlan.individual;
+              billingCycle = _EntryBillingCycle.annual;
+            });
+          },
+          onTeam: () {
+            setState(() {
+              comparisonCheckoutPlan = _EntryDialogPlan.team;
+              billingCycle = _EntryBillingCycle.annual;
+            });
+          },
+        ),
+      );
+    }
+
     final content = plan == null
         ? _EntryDialogChoiceContent(
             mobile: mobile,
@@ -301,6 +366,459 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
                     ],
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EntryPlanComparisonView extends StatelessWidget {
+  final bool mobile;
+  final VoidCallback onSkip;
+  final VoidCallback onFree;
+  final VoidCallback onPremium;
+  final VoidCallback onTeam;
+
+  const _EntryPlanComparisonView({
+    required this.mobile,
+    required this.onSkip,
+    required this.onFree,
+    required this.onPremium,
+    required this.onTeam,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final horizontal = mobile ? 20.0 : 52.0;
+    final cards = [
+      _PlanComparisonCard(
+        title: 'Gratis',
+        subtitle: 'Empieza a compartir tu perfil digital.',
+        price: r'$0',
+        cadence: '/mes',
+        buttonLabel: 'Continuar gratis',
+        onPressed: onFree,
+        features: const [
+          (Icons.person_rounded, '1 perfil digital'),
+          (Icons.link_rounded, 'Enlaces básicos'),
+          (Icons.qr_code_2_rounded, 'QR público incluido'),
+          (Icons.share_rounded, 'Compartir perfil'),
+        ],
+      ),
+      _PlanComparisonCard(
+        title: 'Taploe Premium',
+        subtitle: 'Más personalización y herramientas para vender mejor.',
+        price: r'$131.94',
+        cadence: '/mes',
+        note: r'Mejor precio anual · mensual $179.82',
+        badge: 'Recomendado',
+        highlighted: true,
+        buttonLabel: 'Probar 7 días gratis',
+        onPressed: onPremium,
+        features: const [
+          (Icons.badge_rounded, 'Hasta 5 perfiles digitales'),
+          (Icons.qr_code_2_rounded, 'QR personalizables'),
+          (Icons.palette_rounded, 'Diseño de perfil digital'),
+          (Icons.insights_rounded, 'Analíticas completas'),
+        ],
+      ),
+      _PlanComparisonCard(
+        title: 'Empresas',
+        subtitle: 'Control, consistencia y medición para equipos.',
+        price: r'$89.82',
+        cadence: '/mes',
+        note: r'Por perfil, facturado anual · mensual $115.52',
+        buttonLabel: 'Probar 7 días gratis',
+        onPressed: onTeam,
+        features: const [
+          (Icons.groups_rounded, 'Desde 5 perfiles'),
+          (Icons.dashboard_customize_rounded, 'Plantillas de marca'),
+          (Icons.admin_panel_settings_rounded, 'Control de tarjetas'),
+          (Icons.verified_rounded, 'Perfiles verificados'),
+          (Icons.event_available_rounded, 'Calendario y formularios'),
+          (Icons.file_download_rounded, 'Exportación de contactos'),
+        ],
+      ),
+    ];
+
+    return SafeArea(
+      child: Stack(
+        children: [
+          Positioned(
+            top: mobile ? 14 : 26,
+            left: horizontal,
+            child: const TaploeLogo(size: 38),
+          ),
+          Positioned(
+            top: mobile ? 12 : 24,
+            right: horizontal,
+            child: TextButton(
+              onPressed: onSkip,
+              style: TextButton.styleFrom(
+                foregroundColor: TaploeColors.blue,
+                textStyle: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              child: const Text('Omitir'),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                horizontal,
+                mobile ? 84 : 96,
+                horizontal,
+                mobile ? 28 : 40,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Elige el plan ideal para ti',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        color: context.text,
+                        fontSize: mobile ? 36 : 52,
+                        fontWeight: FontWeight.w700,
+                        height: 1.02,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Puedes empezar gratis y cambiar de plan cuando lo necesites.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.dmSans(
+                        color: context.muted,
+                        fontSize: mobile ? 16 : 19,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: mobile ? 30 : 44),
+                    mobile
+                        ? Column(
+                            children: [
+                              for (final card in cards) ...[
+                                card,
+                                const SizedBox(height: 16),
+                              ],
+                            ],
+                          )
+                        : SizedBox(
+                            height: 496,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (var i = 0; i < cards.length; i++) ...[
+                                  Expanded(child: cards[i]),
+                                  if (i != cards.length - 1)
+                                    const SizedBox(width: 22),
+                                ],
+                              ],
+                            ),
+                          ),
+                    SizedBox(height: mobile ? 12 : 24),
+                    const _PlanTrustBar(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanTrustBar extends StatelessWidget {
+  const _PlanTrustBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      (Icons.check_circle_outline_rounded, 'Cambia o cancela cuando quieras'),
+      (Icons.check_circle_outline_rounded, 'Cancela cuando quieras'),
+      (Icons.support_agent_rounded, 'Soporte prioritario'),
+      (Icons.receipt_long_rounded, 'Facturación transparente'),
+    ];
+
+    return Wrap(
+      spacing: 52,
+      runSpacing: 16,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final item in items)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle_outline_rounded,
+                color: TaploeColors.blue,
+                size: 22,
+              ),
+              const SizedBox(width: 9),
+              Text(
+                item.$2,
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _EntryPlanCheckoutView extends StatelessWidget {
+  final bool mobile;
+  final _EntryDialogPlan plan;
+  final _EntryBillingCycle billingCycle;
+  final ValueChanged<_EntryBillingCycle> onBillingCycleChanged;
+  final VoidCallback onBack;
+  final VoidCallback onClose;
+
+  const _EntryPlanCheckoutView({
+    required this.mobile,
+    required this.plan,
+    required this.billingCycle,
+    required this.onBillingCycleChanged,
+    required this.onBack,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = _EntryDialogCheckoutContent(
+      mobile: mobile,
+      plan: plan,
+      billingCycle: billingCycle,
+      onBillingCycleChanged: onBillingCycleChanged,
+      onBack: onBack,
+    );
+
+    return SafeArea(
+      child: Stack(
+        children: [
+          mobile
+              ? SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 44),
+                      const _EntryDialogVisual(mobile: true),
+                      content,
+                    ],
+                  ),
+                )
+              : Row(
+                  children: [
+                    Expanded(flex: 6, child: content),
+                    const Expanded(flex: 5, child: _EntryDialogVisual()),
+                  ],
+                ),
+          Positioned(
+            top: 18,
+            right: mobile ? 18 : 28,
+            child: IconButton(
+              tooltip: 'Cerrar',
+              onPressed: onClose,
+              icon: const Icon(
+                Icons.close_rounded,
+                color: TaploeColors.blue,
+                size: 30,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanComparisonCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String price;
+  final String cadence;
+  final String? badge;
+  final String? note;
+  final bool highlighted;
+  final String buttonLabel;
+  final VoidCallback onPressed;
+  final List<(IconData, String)> features;
+
+  const _PlanComparisonCard({
+    required this.title,
+    required this.subtitle,
+    required this.price,
+    required this.cadence,
+    required this.buttonLabel,
+    required this.onPressed,
+    required this.features,
+    this.badge,
+    this.note,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = highlighted ? TaploeColors.blue : TaploeColors.border;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor, width: highlighted ? 2 : 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      color: highlighted ? TaploeColors.blue : context.text,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      height: 1.02,
+                    ),
+                  ),
+                ),
+                if (badge != null) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TaploeColors.blue,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          color: TaploeColors.white,
+                          size: 15,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          badge!.toUpperCase(),
+                          style: GoogleFonts.dmSans(
+                            color: TaploeColors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              subtitle,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                height: 1.28,
+              ),
+            ),
+            const SizedBox(height: 34),
+            RichText(
+              text: TextSpan(
+                style: GoogleFonts.outfit(color: context.text),
+                children: [
+                  TextSpan(
+                    text: price,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                    ),
+                  ),
+                  TextSpan(
+                    text: cadence,
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (note != null) ...[
+              const SizedBox(height: 7),
+              Text(
+                note!,
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            TaploeButton(
+              label: buttonLabel,
+              icon: highlighted
+                  ? Icons.arrow_forward_rounded
+                  : Icons.check_rounded,
+              kind: highlighted
+                  ? TaploeButtonKind.primary
+                  : TaploeButtonKind.secondary,
+              expanded: true,
+              onPressed: onPressed,
+            ),
+            const SizedBox(height: 14),
+            const Divider(),
+            const SizedBox(height: 12),
+            for (final feature in features) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: TaploeColors.blue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(feature.$1, color: TaploeColors.blue, size: 15),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      feature.$2,
+                      style: GoogleFonts.dmSans(
+                        color: context.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
         ),
       ),
     );
@@ -409,31 +927,41 @@ class _EntryDialogPlanContent extends StatelessWidget {
     final isTeam = plan == _EntryDialogPlan.team;
     final features = isTeam
         ? const [
+            (Icons.groups_rounded, 'Desde 5 perfiles para tu equipo.'),
+            (Icons.qr_code_2_rounded, 'Códigos QR personalizables por perfil.'),
             (
               Icons.dashboard_customize_rounded,
-              'Crea plantillas para mantener consistencia en todas las tarjetas.',
+              'Plantillas para mantener consistencia de marca.',
             ),
-            (Icons.contacts_rounded, 'Directorio corporativo compartido.'),
+            (Icons.visibility_off_rounded, 'Oculta la marca de Taploe.'),
+            (
+              Icons.event_available_rounded,
+              'Calendario y formularios integrados.',
+            ),
+            (Icons.person_search_rounded, 'Registro de leads por perfil.'),
+            (Icons.file_download_rounded, 'Exportación de contactos.'),
+            (Icons.insights_rounded, 'Analíticas de taps, clics y escaneos.'),
+            (Icons.verified_rounded, 'Marca verificada en cada perfil.'),
             (
               Icons.admin_panel_settings_rounded,
-              'Control administrativo de tarjetas para tu tranquilidad.',
+              'Control administrativo de tarjetas.',
             ),
           ]
         : const [
             (
               Icons.badge_rounded,
-              'Crea hasta 5 tarjetas para ti, una para cada ocasión.',
-            ),
-            (
-              Icons.palette_rounded,
-              'Agrega un color personalizado a tus tarjetas.',
+              'Hasta 5 perfiles digitales para cada ocasión.',
             ),
             (Icons.qr_code_2_rounded, 'Códigos QR personalizables.'),
+            (Icons.palette_rounded, 'Diseño de perfil digital personalizado.'),
+            (Icons.visibility_off_rounded, 'Oculta la marca de Taploe.'),
             (
-              Icons.rocket_launch_rounded,
-              'Oculta la marca Taploe al compartir una tarjeta.',
+              Icons.event_available_rounded,
+              'Calendario y formularios integrados.',
             ),
-            (Icons.file_download_rounded, 'Exporta tus contactos.'),
+            (Icons.person_search_rounded, 'Registro de leads.'),
+            (Icons.file_download_rounded, 'Exportación de contactos.'),
+            (Icons.insights_rounded, 'Analíticas de taps, clics y escaneos.'),
             (Icons.verified_rounded, 'Marca verificada en tu perfil.'),
           ];
 
@@ -457,12 +985,12 @@ class _EntryDialogPlanContent extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back_rounded, size: 28),
               ),
             ),
-          if (!mobile) const Spacer(),
+          SizedBox(height: mobile ? 18 : 28),
           Text(
             isTeam ? 'Taploe para empresas' : 'Taploe Premium',
             style: GoogleFonts.outfit(
               color: context.text,
-              fontSize: mobile ? 36 : 44,
+              fontSize: mobile ? 35 : 42,
               fontWeight: FontWeight.w600,
               height: 1.02,
             ),
@@ -474,36 +1002,48 @@ class _EntryDialogPlanContent extends StatelessWidget {
                 : 'Más personalización para que tu perfil se vea profesional y listo para compartir.',
             style: GoogleFonts.dmSans(
               color: context.muted,
-              fontSize: mobile ? 16 : 18,
+              fontSize: mobile ? 15 : 17,
               fontWeight: FontWeight.w600,
               height: 1.35,
             ),
           ),
-          SizedBox(height: mobile ? 24 : 28),
-          ...features.map(
-            (feature) => Padding(
-              padding: EdgeInsets.only(bottom: mobile ? 14 : 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(feature.$1, color: TaploeColors.blue, size: 22),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      feature.$2,
-                      style: GoogleFonts.dmSans(
-                        color: context.text,
-                        fontSize: mobile ? 15 : 16,
-                        fontWeight: FontWeight.w700,
-                        height: 1.3,
-                      ),
+          SizedBox(height: mobile ? 18 : 22),
+          Column(
+            children: features
+                .map(
+                  (feature) => Padding(
+                    padding: EdgeInsets.only(bottom: mobile ? 9 : 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Icon(
+                            feature.$1,
+                            color: TaploeColors.blue,
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Text(
+                            feature.$2,
+                            style: GoogleFonts.dmSans(
+                              color: context.text,
+                              fontSize: mobile ? 14 : 14.8,
+                              fontWeight: FontWeight.w700,
+                              height: 1.18,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
+                )
+                .toList(),
           ),
           if (!mobile) const Spacer(),
+          SizedBox(height: mobile ? 8 : 14),
           TaploeButton(
             label: 'Iniciar prueba gratis de 7 días',
             icon: Icons.arrow_forward_rounded,
@@ -554,15 +1094,15 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
     final amount = isTeam
         ? annualSelected
               ? r'$5,389.20 MXN'
-              : r'$899.10 MXN'
+              : r'$577.60 MXN'
         : annualSelected
         ? r'$1,583.82 MXN'
         : r'$179.82 MXN';
     final annualPrice = isTeam
-        ? r'$1,077.84 MXN por tarjeta * ($89.82 MXN/mes)'
+        ? r'$1,077.84 MXN por perfil * ($89.82 MXN/mes)'
         : r'$1,583.82 MXN ($131.94 MXN/mes)';
     final monthlyPrice = isTeam
-        ? r'$179.82 MXN por tarjeta/mes'
+        ? r'$115.52 MXN/mes por perfil'
         : r'$179.82 MXN/mes';
     final badge = isTeam
         ? 'MEJOR VALOR - AHORRA 28.61%'
@@ -628,7 +1168,7 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '* 5 tarjetas mínimo',
+                '* 5 perfiles mínimo',
                 style: GoogleFonts.dmSans(
                   color: context.text,
                   fontSize: 14,
@@ -917,16 +1457,92 @@ class _EntryChoiceButton extends StatelessWidget {
   }
 }
 
-class _CardRequiredView extends StatelessWidget {
-  final VoidCallback onLinkCard;
+class _ProfileRequiredView extends StatefulWidget {
+  final ValueChanged<DigitalProfileModel> onProfileCreated;
 
-  const _CardRequiredView({required this.onLinkCard});
+  const _ProfileRequiredView({required this.onProfileCreated});
+
+  @override
+  State<_ProfileRequiredView> createState() => _ProfileRequiredViewState();
+}
+
+class _ProfileRequiredViewState extends State<_ProfileRequiredView> {
+  final slugController = TextEditingController();
+  bool saving = false;
+  String? errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = taploeState.currentUser;
+    final base = user?.username.trim().isNotEmpty == true
+        ? user!.username
+        : user?.email.split('@').first ?? '';
+    slugController.text = normalizePublicSlug(base);
+  }
+
+  @override
+  void dispose() {
+    slugController.dispose();
+    super.dispose();
+  }
+
+  Future<void> createProfile() async {
+    if (saving) return;
+    final user = taploeState.currentUser;
+    if (user == null) {
+      setState(() => errorText = 'Inicia sesión para crear tu perfil.');
+      return;
+    }
+
+    final slug = normalizePublicSlug(slugController.text);
+    if (slug.length < 3) {
+      setState(
+        () => errorText = 'La ruta debe tener al menos 3 letras o números.',
+      );
+      return;
+    }
+
+    setState(() {
+      saving = true;
+      errorText = null;
+      slugController.text = slug;
+    });
+
+    try {
+      final profile = await ProfileRepository.createProfileForUser(
+        user,
+        displayName: user.username.trim().isNotEmpty
+            ? user.username.trim()
+            : slug,
+        publicSlug: slug,
+      );
+      await taploeState.refreshProfiles();
+      DigitalProfileModel? activeProfile;
+      for (final item in taploeState.profiles) {
+        if (item.id == profile.id) {
+          activeProfile = item;
+          break;
+        }
+      }
+      taploeState.setActiveProfile(activeProfile ?? profile);
+      if (!mounted) return;
+      widget.onProfileCreated(activeProfile ?? profile);
+    } catch (error) {
+      safePrintError(error);
+      if (!mounted) return;
+      setState(() {
+        saving = false;
+        errorText = _createProfileErrorMessage(error, slug);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = taploeState.currentUser;
-    final titleName = user?.fullName.trim().isNotEmpty == true
-        ? user!.fullName.trim()
+    final titleName = user?.username.trim().isNotEmpty == true
+        ? user!.username.trim()
         : 'Taploe';
 
     return Scaffold(
@@ -956,13 +1572,13 @@ class _CardRequiredView extends StatelessWidget {
                     child: Column(
                       children: [
                         const Icon(
-                          Icons.qr_code_scanner_rounded,
+                          Icons.badge_outlined,
                           color: TaploeColors.blue,
                           size: 46,
                         ),
                         const SizedBox(height: 22),
                         Text(
-                          'Vincula tu tarjeta Taploe',
+                          'Crea tu perfil digital',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             color: context.text,
@@ -973,7 +1589,296 @@ class _CardRequiredView extends StatelessWidget {
                         ),
                         const SizedBox(height: 14),
                         Text(
-                          'Hola, $titleName. Escanea el QR físico de tu tarjeta para crear tu perfil digital y empezar a compartirlo.',
+                          'Hola, $titleName. Elige la ruta pública de tu perfil digital.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            color: context.muted,
+                            fontSize: 17,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        _PublicSlugInput(
+                          controller: slugController,
+                          errorText: errorText,
+                          onChanged: (_) {
+                            if (errorText != null) {
+                              setState(() => errorText = null);
+                            }
+                          },
+                          onSubmitted: (_) => createProfile(),
+                        ),
+                        const SizedBox(height: 22),
+                        TaploeButton(
+                          label: 'Crear perfil digital',
+                          icon: Icons.add_rounded,
+                          loading: saving,
+                          expanded: true,
+                          onPressed: createProfile,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Después podrás vincular una tarjeta Taploe si quieres usar NFC o QR físico.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            color: context.muted,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  TextButton.icon(
+                    onPressed: taploeState.signOut,
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('Cerrar sesión'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PublicSlugInput extends StatefulWidget {
+  final TextEditingController controller;
+  final String? errorText;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+
+  const _PublicSlugInput({
+    required this.controller,
+    required this.errorText,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
+
+  @override
+  State<_PublicSlugInput> createState() => _PublicSlugInputState();
+}
+
+class _PublicSlugInputState extends State<_PublicSlugInput> {
+  final focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    focusNode.removeListener(_handleFocusChange);
+    focusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = widget.errorText != null;
+    final focused = focusNode.hasFocus;
+    final borderColor = hasError
+        ? TaploeColors.error
+        : focused
+        ? TaploeColors.blue
+        : TaploeColors.borderStrong;
+    const inactiveLabelColor = Color(0xFF9AA1B2);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => focusNode.requestFocus(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            height: 76,
+            decoration: BoxDecoration(
+              color: focused ? const Color(0xFFF8FAFF) : TaploeColors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: borderColor,
+                width: hasError || focused ? 1.8 : 1,
+              ),
+              boxShadow: focused
+                  ? [
+                      BoxShadow(
+                        color: TaploeColors.blue.withValues(alpha: 0.12),
+                        blurRadius: 0,
+                        spreadRadius: 3,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 26, right: 18),
+                  child: Text(
+                    'taploe.com/',
+                    style: GoogleFonts.dmSans(
+                      color: focused ? TaploeColors.blue : inactiveLabelColor,
+                      fontSize: context.isMobile ? 17 : 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'username',
+                          style: GoogleFonts.dmSans(
+                            color: focused
+                                ? TaploeColors.blue
+                                : inactiveLabelColor,
+                            fontSize: context.isMobile ? 14 : 16,
+                            fontWeight: FontWeight.w500,
+                            height: 1,
+                          ),
+                        ),
+                        SizedBox(
+                          height: 30,
+                          child: TextField(
+                            focusNode: focusNode,
+                            controller: widget.controller,
+                            enabled: true,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.done,
+                            keyboardType: TextInputType.url,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z0-9-]'),
+                              ),
+                            ],
+                            onChanged: widget.onChanged,
+                            onSubmitted: widget.onSubmitted,
+                            style: GoogleFonts.outfit(
+                              color: context.text,
+                              fontSize: context.isMobile ? 20 : 23,
+                              fontWeight: FontWeight.w400,
+                              height: 1.05,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              focusedErrorBorder: InputBorder.none,
+                              filled: false,
+                              hintText: 'tu-nombre',
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              widget.errorText!,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.error,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _InitialCardLinkView extends StatelessWidget {
+  final VoidCallback onLinkCard;
+  final VoidCallback onSkip;
+
+  const _InitialCardLinkView({required this.onLinkCard, required this.onSkip});
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = taploeState.activeProfile;
+    final titleName = profile?.displayName.trim().isNotEmpty == true
+        ? profile!.displayName.trim()
+        : 'tu perfil';
+
+    return Scaffold(
+      backgroundColor: TaploeColors.white,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const TaploeLogo(size: 46),
+                  const SizedBox(height: 42),
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: context.isMobile ? 22 : 54,
+                      vertical: context.isMobile ? 30 : 46,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TaploeColors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: TaploeColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        Image.asset(
+                          'assets/images/tarjeta-nfc.png',
+                          height: context.isMobile ? 118 : 150,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.credit_card_rounded,
+                            color: TaploeColors.blue,
+                            size: 78,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Vincula una tarjeta Taploe',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            color: context.text,
+                            fontSize: context.isMobile ? 32 : 42,
+                            fontWeight: FontWeight.w600,
+                            height: 1.05,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          '$titleName ya está listo. Puedes conectar una tarjeta NFC o QR físico ahora, o hacerlo después desde Tarjetas.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.dmSans(
                             color: context.muted,
@@ -990,15 +1895,10 @@ class _CardRequiredView extends StatelessWidget {
                             onPressed: onLinkCard,
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Al vincularla crearemos tu perfil y podrás completarlo.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.dmSans(
-                            color: context.muted,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: onSkip,
+                          child: const Text('Omitir por ahora'),
                         ),
                       ],
                     ),
@@ -1119,8 +2019,8 @@ class _TopHeader extends StatelessWidget {
                         backgroundColor: TaploeColors.black,
                         child: Text(
                           initials(
-                            taploeState.currentUser?.fullName.isNotEmpty == true
-                                ? taploeState.currentUser!.fullName
+                            taploeState.currentUser?.username.isNotEmpty == true
+                                ? taploeState.currentUser!.username
                                 : taploeState.currentUser?.email ?? 'T',
                           ),
                           style: const TextStyle(color: Colors.white),
@@ -1658,8 +2558,8 @@ class _Sidebar extends StatelessWidget {
                         backgroundColor: TaploeColors.black,
                         child: Text(
                           initials(
-                            user?.fullName.isNotEmpty == true
-                                ? user!.fullName
+                            user?.username.isNotEmpty == true
+                                ? user!.username
                                 : user?.email ?? 'T',
                           ),
                           style: const TextStyle(color: Colors.white),
@@ -1668,8 +2568,8 @@ class _Sidebar extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          user?.fullName.isNotEmpty == true
-                              ? user!.fullName
+                          user?.username.isNotEmpty == true
+                              ? user!.username
                               : user?.email ?? 'Taploe',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1758,19 +2658,40 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: taploeState.signOut,
+              onTap: () {
+                showDialog<void>(
+                  context: context,
+                  barrierDismissible: true,
+                  builder: (context) => const _DashboardEntryDialog(),
+                );
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 13,
                 ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF315EF8),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.logout_rounded, size: 20),
+                    const FaIcon(
+                      FontAwesomeIcons.crown,
+                      color: Color(0xFFF5C84C),
+                      size: 17,
+                    ),
                     const SizedBox(width: 10),
-                    Text(
-                      'Cerrar sesión',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                    Expanded(
+                      child: Text(
+                        'Actualizar a Premium',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          color: TaploeColors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1952,6 +2873,17 @@ class _CreateProfileModalState extends State<_CreateProfileModal> {
       setState(() => errorText = 'Escribe un nombre para el perfil.');
       return;
     }
+    final normalizedName = name.toLowerCase();
+    final duplicateName = taploeState.profiles.any(
+      (profile) => profile.displayName.trim().toLowerCase() == normalizedName,
+    );
+    if (duplicateName) {
+      setState(
+        () => errorText =
+            'Ya tienes un perfil llamado "$name". Usa otro nombre para distinguirlo.',
+      );
+      return;
+    }
 
     setState(() {
       saving = true;
@@ -1990,7 +2922,7 @@ class _CreateProfileModalState extends State<_CreateProfileModal> {
       if (!mounted) return;
       setState(() {
         saving = false;
-        errorText = 'No pudimos crear el perfil. Intenta de nuevo.';
+        errorText = _createProfileErrorMessage(error, name);
       });
     }
   }
@@ -2044,6 +2976,58 @@ class _CreateProfileModalState extends State<_CreateProfileModal> {
       ],
     );
   }
+}
+
+String _createProfileErrorMessage(Object error, String requestedName) {
+  if (error is ArgumentError) {
+    final message = error.message?.toString();
+    if (message == 'profile_slug_taken') {
+      return 'taploe.com/$requestedName ya está en uso. Elige otra ruta.';
+    }
+    if (message == 'profile_slug_too_short') {
+      return 'La ruta debe tener al menos 3 letras o números.';
+    }
+  }
+
+  if (error is PostgrestException) {
+    final message = error.message.toLowerCase();
+    final details = (error.details ?? '').toString().toLowerCase();
+    final combined = '$message $details';
+
+    if (error.code == '23505') {
+      if (combined.contains('public_slug') ||
+          combined.contains('digital_profiles_public_slug_key')) {
+        return 'taploe.com/$requestedName ya está en uso. Elige otra ruta.';
+      }
+      if (combined.contains('profile_name') ||
+          combined.contains('display_name')) {
+        return 'Ya existe un perfil con ese nombre. Escribe un nombre diferente.';
+      }
+      return 'Ya existe un registro con esos datos. Cambia el nombre e intenta de nuevo.';
+    }
+
+    if (error.code == '23514') {
+      return 'El nombre genera un enlace público inválido. Usa letras, números o espacios.';
+    }
+
+    if (error.code == '42501' || combined.contains('row-level security')) {
+      return 'Tu sesión no tiene permiso para crear perfiles. Cierra sesión, vuelve a entrar e intenta de nuevo.';
+    }
+
+    if (error.code == '23503') {
+      return 'No pudimos asociar el perfil con tu usuario. Vuelve a iniciar sesión e intenta de nuevo.';
+    }
+  }
+
+  final message = error.toString().toLowerCase();
+  if (message.contains('duplicate key') || message.contains('already exists')) {
+    return 'Ya existe un perfil con esos datos. Usa otro nombre.';
+  }
+  if (message.contains('network') || message.contains('failed to fetch')) {
+    return 'No pudimos conectarnos con el servidor. Revisa tu conexión e intenta de nuevo.';
+  }
+
+  return 'No pudimos crear el perfil por un error inesperado. Intenta de nuevo.';
 }
 
 enum _CardLinkingStep { intro, scanning, validating, linking, success, error }
@@ -2199,9 +3183,9 @@ class _TaploeCardLinkModalState extends State<TaploeCardLinkModal> {
       await CardActivationService.activateCardByToken(token: token);
       await taploeState.refreshAll();
       if (!mounted) return;
-      final fallbackName = widget.user.fullName.trim().isEmpty
+      final fallbackName = widget.user.username.trim().isEmpty
           ? 'tu perfil Taploe'
-          : widget.user.fullName.trim();
+          : widget.user.username.trim();
       setState(() {
         linkedProfileName =
             taploeState.activeProfile?.displayName ?? fallbackName;
@@ -2269,9 +3253,9 @@ class _TaploeCardLinkModalState extends State<TaploeCardLinkModal> {
               profileName:
                   linkedProfileName ??
                   taploeState.activeProfile?.displayName ??
-                  (widget.user.fullName.trim().isEmpty
+                  (widget.user.username.trim().isEmpty
                       ? 'tu perfil Taploe'
-                      : widget.user.fullName.trim()),
+                      : widget.user.username.trim()),
               onViewCard: widget.onViewCard,
               onClose: widget.onCloseSuccess,
             ),
@@ -3464,7 +4448,7 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
         ? 0
         : ((s.linkClicks / s.profileViews) * 100).round();
     return PageShell(
-      title: 'Hola, ${user?.fullName.split(' ').first ?? 'Taploe'}',
+      title: 'Hola, ${user?.username.split(' ').first ?? 'Taploe'}',
       subtitle: 'Aquí tienes un resumen de tu actividad y rendimiento.',
       child: loading
           ? const Center(child: CircularProgressIndicator())
@@ -3475,6 +4459,10 @@ class _HomeOverviewViewState extends State<HomeOverviewView> {
             )
           : Column(
               children: [
+                if (!taploeState.hasLinkedCard) ...[
+                  const _LinkCardPromptPanel(),
+                  const SizedBox(height: 16),
+                ],
                 PwaInstallPanel(profile: p, compact: false),
                 const SizedBox(height: 16),
                 _HomeMetricsBar(
@@ -10910,8 +11898,110 @@ class _CardsEmptyActivation extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(color: context.muted, height: 1.4),
           ),
+          const SizedBox(height: 18),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: TaploeButton(
+              label: 'Vincular tarjeta',
+              icon: Icons.qr_code_scanner_rounded,
+              expanded: true,
+              onPressed: () => _showCardLinkingDialog(context),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _LinkCardPromptPanel extends StatelessWidget {
+  final bool compact;
+  final bool embedded;
+
+  const _LinkCardPromptPanel({this.compact = false, this.embedded = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final stacked = compact || MediaQuery.sizeOf(context).width < 760;
+    final image = Image.asset(
+      'assets/images/tarjeta-nfc.png',
+      height: compact ? 108 : 132,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => Icon(
+        Icons.credit_card_rounded,
+        color: TaploeColors.blue,
+        size: compact ? 68 : 82,
+      ),
+    );
+    final copy = Column(
+      crossAxisAlignment: stacked
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Vincula tu tarjeta Taploe',
+          textAlign: stacked ? TextAlign.center : TextAlign.left,
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: compact ? 20 : 23,
+            fontWeight: FontWeight.w600,
+            height: 1.08,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Conecta una tarjeta NFC o QR físico a tu perfil digital.',
+          textAlign: stacked ? TextAlign.center : TextAlign.left,
+          style: GoogleFonts.dmSans(
+            color: context.muted,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 16),
+        TaploeButton(
+          width: stacked ? double.infinity : 220,
+          label: 'Vincular tarjeta',
+          icon: Icons.qr_code_scanner_rounded,
+          onPressed: () => _showCardLinkingDialog(context),
+        ),
+      ],
+    );
+
+    final content = stacked
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              image,
+              SizedBox(height: compact ? 14 : 18),
+              copy,
+            ],
+          )
+        : Row(
+            children: [
+              SizedBox(width: 190, child: image),
+              const SizedBox(width: 22),
+              Expanded(child: copy),
+            ],
+          );
+
+    if (embedded) {
+      return Container(
+        padding: EdgeInsets.all(compact ? 16 : 20),
+        decoration: BoxDecoration(
+          color: TaploeColors.page,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: TaploeColors.border),
+        ),
+        child: content,
+      );
+    }
+
+    return TaploePanel(
+      radius: 22,
+      padding: EdgeInsets.all(compact ? 18 : 22),
+      child: content,
     );
   }
 }
@@ -11673,6 +12763,13 @@ class _ShareCenterViewState extends State<ShareCenterView> {
                           },
                         ),
                         const SizedBox(height: 14),
+                        if (!taploeState.hasLinkedCard) ...[
+                          const _LinkCardPromptPanel(
+                            compact: true,
+                            embedded: true,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         PwaInstallPanel(profile: profile, compact: true),
                       ],
                     ),
@@ -14057,7 +15154,7 @@ class _TeamPlanRequestDialogState extends State<_TeamPlanRequestDialog> {
   void initState() {
     super.initState();
     final user = taploeState.currentUser;
-    fullName.text = user?.fullName ?? '';
+    fullName.text = user?.username ?? '';
     email.text = user?.email ?? '';
     phone.text = user?.phone ?? '';
     company.text = taploeState.organization?.name ?? '';
@@ -14771,34 +15868,105 @@ class _SettingsViewState extends State<SettingsView> {
   void _fill() {
     final user = taploeState.currentUser;
     if (user == null) return;
-    if (name.text == user.fullName &&
+    if (name.text == user.username &&
         phone.text == (user.phone ?? '') &&
         timezone.text == user.timezone) {
       return;
     }
-    name.text = user.fullName;
+    name.text = user.username;
     phone.text = user.phone ?? '';
     timezone.text = user.timezone;
   }
 
   Future<void> save() async {
+    final user = taploeState.currentUser;
+    if (user == null) return;
+
+    final requestedUsername = UserRepository.normalizeUsername(name.text);
+    if (requestedUsername.length < 3) {
+      taploeToast(
+        context,
+        'El nombre de usuario debe tener al menos 3 letras o números.',
+        error: true,
+      );
+      return;
+    }
+
+    final currentUsername = UserRepository.normalizeUsername(user.username);
+    final usernameChanged = requestedUsername != currentUsername;
+    final profile = taploeState.activeProfile;
+    final willChangePublicLink =
+        usernameChanged &&
+        profile != null &&
+        requestedUsername != profile.publicSlug;
+
+    if (willChangePublicLink) {
+      final confirmed = await _confirmUsernamePublicLinkChange(
+        context,
+        currentSlug: profile.publicSlug,
+        nextSlug: requestedUsername,
+      );
+      if (confirmed != true) return;
+    }
+
     setState(() => saving = true);
     try {
+      if (usernameChanged) {
+        final usernameTaken = await UserRepository.usernameExists(
+          requestedUsername,
+          excludeUserId: user.id,
+        );
+        if (usernameTaken) {
+          if (mounted) {
+            taploeToast(
+              context,
+              'Ese nombre de usuario ya está en uso.',
+              error: true,
+            );
+          }
+          return;
+        }
+
+        if (profile != null) {
+          final slugTaken = await ProfileRepository.slugExists(
+            requestedUsername,
+            excludeProfileId: profile.id,
+          );
+          if (slugTaken) {
+            if (mounted) {
+              taploeToast(
+                context,
+                'Ese enlace público ya está en uso.',
+                error: true,
+              );
+            }
+            return;
+          }
+        }
+      }
+
       await UserRepository.updateCurrentUser(
-        fullName: name.text,
+        username: requestedUsername,
         phone: phone.text,
         timezone: timezone.text,
       );
+
+      if (profile != null && usernameChanged) {
+        final updatedProfile = profile.copyWith(
+          displayName: requestedUsername,
+          publicSlug: requestedUsername,
+          vcard: _profileVcardWithFirstName(profile, requestedUsername),
+        );
+        taploeState.updateActiveProfile(updatedProfile);
+        await ProfileRepository.updateProfile(updatedProfile);
+      }
+
       await taploeState.refreshAll();
       if (mounted) taploeToast(context, 'Configuración actualizada.');
     } catch (e) {
       safePrintError(e);
       if (mounted) {
-        taploeToast(
-          context,
-          'No pudimos guardar la configuración. Intenta de nuevo.',
-          error: true,
-        );
+        taploeToast(context, _settingsSaveErrorMessage(e), error: true);
       }
     } finally {
       if (mounted) setState(() => saving = false);
@@ -14841,8 +16009,14 @@ class _SettingsViewState extends State<SettingsView> {
                         ),
                         const SizedBox(height: 14),
                         TaploeTextField(
-                          label: 'Nombre',
+                          label: 'Nombre de usuario',
                           controller: name,
+                          keyboardType: TextInputType.url,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[a-zA-Z0-9-]'),
+                            ),
+                          ],
                           onSubmitted: (_) => save(),
                         ),
                         const SizedBox(height: 12),
@@ -14948,4 +16122,108 @@ class _SettingsViewState extends State<SettingsView> {
             ),
     );
   }
+}
+
+Future<bool?> _confirmUsernamePublicLinkChange(
+  BuildContext context, {
+  required String currentSlug,
+  required String nextSlug,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(
+        'Cambiar enlace público',
+        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Si cambias tu nombre de usuario, también cambiará el enlace público de tu perfil.',
+            style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          _InfoLine(
+            label: 'Actual',
+            value: TaploeConfig.profileUrl(currentSlug),
+          ),
+          _InfoLine(label: 'Nuevo', value: TaploeConfig.profileUrl(nextSlug)),
+        ],
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      actions: [
+        TaploeButton(
+          width: 130,
+          label: 'Cancelar',
+          kind: TaploeButtonKind.secondary,
+          onPressed: () => Navigator.pop(context, false),
+        ),
+        TaploeButton(
+          width: 190,
+          label: 'Cambiar enlace',
+          icon: Icons.link_rounded,
+          onPressed: () => Navigator.pop(context, true),
+        ),
+      ],
+    ),
+  );
+}
+
+ProfileVcardModel? _profileVcardWithFirstName(
+  DigitalProfileModel profile,
+  String firstName,
+) {
+  final vcard = profile.vcard;
+  if (vcard == null) {
+    return ProfileVcardModel(profileId: profile.id, firstName: firstName);
+  }
+  return ProfileVcardModel(
+    id: vcard.id,
+    profileId: vcard.profileId,
+    firstName: firstName,
+    lastName: vcard.lastName,
+    organization: vcard.organization,
+    title: vcard.title,
+    email: vcard.email,
+    phone: vcard.phone,
+    mobilePhone: vcard.mobilePhone,
+    whatsappPhone: vcard.whatsappPhone,
+    websiteUrl: vcard.websiteUrl,
+    addressLine1: vcard.addressLine1,
+    addressLine2: vcard.addressLine2,
+    city: vcard.city,
+    state: vcard.state,
+    postalCode: vcard.postalCode,
+    country: vcard.country,
+    note: vcard.note,
+  );
+}
+
+String _settingsSaveErrorMessage(Object error) {
+  if (error is ArgumentError) {
+    final message = error.message?.toString();
+    if (message == 'username_too_short') {
+      return 'El nombre de usuario debe tener al menos 3 letras o números.';
+    }
+    if (message == 'username_taken') {
+      return 'Ese nombre de usuario ya está en uso.';
+    }
+  }
+
+  if (error is PostgrestException && error.code == '23505') {
+    final combined = '${error.message} ${error.details ?? ''}'.toLowerCase();
+    if (combined.contains('full_name') ||
+        combined.contains('username') ||
+        combined.contains('app_users')) {
+      return 'Ese nombre de usuario ya está en uso.';
+    }
+    if (combined.contains('public_slug') ||
+        combined.contains('digital_profiles_public_slug_key')) {
+      return 'Ese enlace público ya está en uso.';
+    }
+  }
+
+  return 'No pudimos guardar la configuración. Intenta de nuevo.';
 }

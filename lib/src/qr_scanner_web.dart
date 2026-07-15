@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:js' as js;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:ui_web' as ui_web;
@@ -50,6 +51,7 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
   html.MediaStream? stream;
   Timer? scanTimer;
   JSObject? detector;
+  bool usingFallbackDecoder = false;
   String? errorMessage;
   bool starting = true;
   bool detected = false;
@@ -73,14 +75,6 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
   }
 
   Future<void> _start() async {
-    if (!globalContext.has('BarcodeDetector')) {
-      setState(() {
-        starting = false;
-        errorMessage = 'Este navegador no permite escanear con cámara.';
-      });
-      return;
-    }
-
     try {
       final mediaDevices = html.window.navigator.mediaDevices;
       if (mediaDevices == null) {
@@ -101,12 +95,18 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
       video.srcObject = stream;
       await video.play();
 
-      final barcodeDetector = globalContext['BarcodeDetector'] as JSFunction;
-      detector = barcodeDetector.callAsConstructor<JSObject>(
-        {
-          'formats': ['qr_code'],
-        }.jsify(),
-      );
+      if (globalContext.has('BarcodeDetector')) {
+        final barcodeDetector = globalContext['BarcodeDetector'] as JSFunction;
+        detector = barcodeDetector.callAsConstructor<JSObject>(
+          {
+            'formats': ['qr_code'],
+          }.jsify(),
+        );
+        usingFallbackDecoder = false;
+      } else {
+        detector = null;
+        usingFallbackDecoder = true;
+      }
 
       if (!mounted) return;
       setState(() => starting = false);
@@ -125,7 +125,12 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
   }
 
   Future<void> _scanFrame() async {
-    if (detected || detector == null || video.readyState < 2) return;
+    if (detected || video.readyState < 2) return;
+    if (usingFallbackDecoder) {
+      _scanFrameWithJsQr();
+      return;
+    }
+    if (detector == null) return;
 
     try {
       final promise = detector!.callMethod<JSPromise<JSArray<JSObject>>>(
@@ -146,6 +151,39 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
       widget.onDetected(raw.trim());
     } catch (_) {
       // Some browsers throw while the video is settling. The next frame can work.
+    }
+  }
+
+  void _scanFrameWithJsQr() {
+    if (!js.context.hasProperty('jsQR')) {
+      return;
+    }
+
+    try {
+      final width = video.videoWidth;
+      final height = video.videoHeight;
+      if (width <= 0 || height <= 0) return;
+
+      final canvas = html.CanvasElement(width: width, height: height);
+      final context = canvas.context2D;
+      context.drawImageScaled(video, 0, 0, width, height);
+      final imageData = context.getImageData(0, 0, width, height);
+      final result = js.context.callMethod('jsQR', [
+        imageData.data,
+        width,
+        height,
+      ]);
+      if (result == null) return;
+
+      final raw = result['data']?.toString().trim();
+      if (raw == null || raw.isEmpty) return;
+
+      detected = true;
+      _stopCamera();
+      if (!mounted) return;
+      widget.onDetected(raw);
+    } catch (_) {
+      // Keep scanning; Firefox/Safari can throw while the video frame stabilizes.
     }
   }
 
@@ -207,7 +245,9 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
           const SizedBox(height: 8),
           Text(
             errorMessage == null
-                ? 'Coloca el QR dentro del recuadro para identificarla.'
+                ? usingFallbackDecoder
+                      ? 'Coloca el QR dentro del recuadro. Compatible con Firefox y Safari.'
+                      : 'Coloca el QR dentro del recuadro para identificarla.'
                 : 'Permite el acceso a la cámara para escanear tu tarjeta.',
             style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
           ),
@@ -270,7 +310,9 @@ class _TaploeQrScannerViewState extends State<TaploeQrScannerView> {
           const SizedBox(height: 12),
           Text(
             errorMessage == null
-                ? 'Lectura automática activa.'
+                ? usingFallbackDecoder
+                      ? 'Cámara activa con lector compatible.'
+                      : 'Lectura automática activa.'
                 : 'Puedes cerrar e intentarlo de nuevo después de habilitar cámara.',
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(color: context.muted, height: 1.35),

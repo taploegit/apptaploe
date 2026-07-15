@@ -8,7 +8,7 @@ int _int(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 class AppUserModel {
   final String id;
   final String? authUserId;
-  final String fullName;
+  final String username;
   final String email;
   final String? phone;
   final String? avatarUrl;
@@ -18,7 +18,7 @@ class AppUserModel {
   const AppUserModel({
     required this.id,
     this.authUserId,
-    required this.fullName,
+    required this.username,
     required this.email,
     this.phone,
     this.avatarUrl,
@@ -29,7 +29,7 @@ class AppUserModel {
   factory AppUserModel.fromJson(Map<String, dynamic> json) => AppUserModel(
     id: json['id'] as String,
     authUserId: json['auth_user_id'] as String?,
-    fullName: json['full_name'] as String? ?? '',
+    username: json['username'] as String? ?? json['full_name'] as String? ?? '',
     email: json['email'] as String? ?? '',
     phone: json['phone'] as String?,
     avatarUrl: json['avatar_url'] as String?,
@@ -39,7 +39,7 @@ class AppUserModel {
 
   Map<String, dynamic> toUpsert() => {
     'auth_user_id': authUserId,
-    'full_name': fullName,
+    'username': username,
     'email': email,
     if (phone != null) 'phone': phone,
     if (avatarUrl != null) 'avatar_url': avatarUrl,

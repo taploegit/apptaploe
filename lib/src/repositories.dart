@@ -194,6 +194,8 @@ class QuoteRequestRepository {
 }
 
 class UserRepository {
+  static String normalizeUsername(String value) => normalizePublicSlug(value);
+
   static Future<User?> verifiedAuthUser() async {
     if (_db.auth.currentUser == null) return null;
 
@@ -227,38 +229,52 @@ class UserRepository {
 
     final email = auth.email ?? '';
     final name =
-        (auth.userMetadata?['full_name'] ??
+        (auth.userMetadata?['username'] ??
+                auth.userMetadata?['full_name'] ??
                 auth.userMetadata?['name'] ??
                 email.split('@').first)
             .toString();
+    final username = await generateUniqueUsername(name);
 
-    await _db.from('app_users').insert({
-      'auth_user_id': auth.id,
-      'full_name': name,
-      'email': email,
-      'status': 'active',
-      'preferred_language': 'es',
-      'timezone': 'America/Tijuana',
-    });
+    try {
+      await _db.from('app_users').insert({
+        'auth_user_id': auth.id,
+        'username': username,
+        'email': email,
+        'status': 'active',
+        'preferred_language': 'es',
+        'timezone': 'America/Tijuana',
+      });
+    } on PostgrestException catch (error) {
+      if (!_isDuplicateAuthUser(error)) rethrow;
+    }
 
     return _fetchByAuthUserId(auth.id);
   }
 
   static Future<AppUserModel> upsertCurrentUser({
-    String? fullName,
+    String? username,
     required String email,
   }) async {
     final auth = await verifiedAuthUser();
     if (auth == null) throw Exception('No hay sesión activa.');
 
     final existing = await _fetchByAuthUserId(auth.id);
+    final requestedUsername = username?.trim().isNotEmpty == true
+        ? normalizeUsername(username!)
+        : null;
 
     if (existing != null) {
+      if (requestedUsername != null &&
+          requestedUsername != normalizeUsername(existing.username) &&
+          await usernameExists(requestedUsername, excludeUserId: existing.id)) {
+        throw ArgumentError('username_taken');
+      }
+
       await _db
           .from('app_users')
           .update({
-            if (fullName != null && fullName.trim().isNotEmpty)
-              'full_name': fullName.trim(),
+            'username': requestedUsername ?? existing.username,
             'email': email.trim().toLowerCase(),
             'last_login_at': nowIso(),
             'updated_at': nowIso(),
@@ -268,33 +284,82 @@ class UserRepository {
       return (await _fetchByAuthUserId(auth.id))!;
     }
 
-    await _db.from('app_users').insert({
-      'auth_user_id': auth.id,
-      'full_name': fullName?.trim().isNotEmpty == true
-          ? fullName!.trim()
-          : email.split('@').first,
-      'email': email.trim().toLowerCase(),
-      'status': 'active',
-      'preferred_language': 'es',
-      'timezone': 'America/Tijuana',
-      'last_login_at': nowIso(),
-    });
+    final generatedUsername = await generateUniqueUsername(
+      requestedUsername ?? email.split('@').first,
+    );
+
+    try {
+      await _db.from('app_users').insert({
+        'auth_user_id': auth.id,
+        'username': generatedUsername,
+        'email': email.trim().toLowerCase(),
+        'status': 'active',
+        'preferred_language': 'es',
+        'timezone': 'America/Tijuana',
+        'last_login_at': nowIso(),
+      });
+    } on PostgrestException catch (error) {
+      if (!_isDuplicateAuthUser(error)) rethrow;
+    }
 
     return (await _fetchByAuthUserId(auth.id))!;
   }
 
+  static bool _isDuplicateAuthUser(PostgrestException error) {
+    return error.code == '23505' &&
+        error.message.contains('app_users_auth_user_id_key');
+  }
+
+  static Future<bool> usernameExists(
+    String username, {
+    String? excludeUserId,
+  }) async {
+    final clean = normalizeUsername(username);
+    if (clean.isEmpty) return false;
+
+    final query = _db.from('app_users').select('id').ilike('username', clean);
+    final rows = excludeUserId == null
+        ? await query.limit(1)
+        : await query.neq('id', excludeUserId).limit(1);
+    return rows.isNotEmpty;
+  }
+
+  static Future<String> generateUniqueUsername(String base) async {
+    final normalizedBase = normalizeUsername(base);
+    final usernameBase = normalizedBase.length >= 3
+        ? normalizedBase
+        : 'taploe-${DateTime.now().millisecondsSinceEpoch}';
+    var username = usernameBase;
+    var i = 1;
+    while (await usernameExists(username)) {
+      username = '$usernameBase-$i';
+      i++;
+    }
+    return username;
+  }
+
   static Future<AppUserModel> updateCurrentUser({
-    required String fullName,
+    required String username,
     String? phone,
     String? timezone,
   }) async {
     final current = await verifiedAuthUser();
     if (current == null) throw Exception('No hay sesión activa.');
+    final existing = await _fetchByAuthUserId(current.id);
+    if (existing == null) throw Exception('No se pudo cargar el usuario.');
+
+    final cleanUsername = normalizeUsername(username);
+    if (cleanUsername.length < 3) {
+      throw ArgumentError('username_too_short');
+    }
+    if (await usernameExists(cleanUsername, excludeUserId: existing.id)) {
+      throw ArgumentError('username_taken');
+    }
 
     await _db
         .from('app_users')
         .update({
-          'full_name': fullName.trim(),
+          'username': cleanUsername,
           'phone': phone?.trim(),
           if (timezone != null && timezone.trim().isNotEmpty)
             'timezone': timezone.trim(),
@@ -341,15 +406,15 @@ class UserRepository {
     }
 
     final slug = await ProfileRepository.generateUniqueSlug(
-      user.fullName.isNotEmpty ? user.fullName : user.email,
+      user.username.isNotEmpty ? user.username : user.email,
     );
 
     final inserted = await _db
         .from('digital_profiles')
         .insert({
           'owner_user_id': user.id,
-          'display_name': user.fullName.isNotEmpty
-              ? user.fullName
+          'display_name': user.username.isNotEmpty
+              ? user.username
               : 'Taploe User',
           'profile_name': 'Perfil principal',
           'public_slug': slug,
@@ -364,7 +429,7 @@ class UserRepository {
     final profile = DigitalProfileModel(
       id: profileId,
       ownerUserId: user.id,
-      displayName: user.fullName.isNotEmpty ? user.fullName : 'Taploe User',
+      displayName: user.username.isNotEmpty ? user.username : 'Taploe User',
       profileName: 'Perfil principal',
       publicSlug: slug,
       status: 'active',
@@ -457,13 +522,22 @@ class AuthRepository {
   }
 
   static Future<void> signInWithOAuth(OAuthProvider provider) async {
-    await _db.auth.signInWithOAuth(provider, redirectTo: Uri.base.origin);
+    final redirectUri = Uri(
+      scheme: Uri.base.scheme,
+      host: Uri.base.host,
+      port: Uri.base.hasPort ? Uri.base.port : null,
+      path: '/auth-loading',
+    );
+    await _db.auth.signInWithOAuth(
+      provider,
+      redirectTo: redirectUri.toString(),
+    );
   }
 
   static Future<AppUserModel> verifyOtp({
     required String email,
     required String token,
-    String? fullName,
+    String? username,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedToken = token.trim();
@@ -482,7 +556,7 @@ class AuthRepository {
     }
 
     return UserRepository.upsertCurrentUser(
-      fullName: fullName,
+      username: username,
       email: normalizedEmail,
     );
   }
@@ -555,7 +629,7 @@ class ProfileRepository {
     if (vcard == null) {
       await _db.from('profile_vcard_details').insert({
         'profile_id': profile.id,
-        'first_name': user.fullName,
+        'first_name': user.username,
         'email': user.email,
       });
     }
@@ -599,13 +673,23 @@ class ProfileRepository {
   static Future<DigitalProfileModel> createProfileForUser(
     AppUserModel user, {
     String? displayName,
+    String? publicSlug,
   }) async {
     final name = displayName?.trim().isNotEmpty == true
         ? displayName!.trim()
-        : (user.fullName.isNotEmpty
-              ? user.fullName
+        : (user.username.isNotEmpty
+              ? user.username
               : user.email.split('@').first);
-    final slug = await generateUniqueSlug(name);
+    final requestedSlug = publicSlug == null
+        ? null
+        : normalizePublicSlug(publicSlug);
+    if (requestedSlug != null && requestedSlug.length < 3) {
+      throw ArgumentError('profile_slug_too_short');
+    }
+    if (requestedSlug != null && await slugExists(requestedSlug)) {
+      throw ArgumentError('profile_slug_taken');
+    }
+    final slug = requestedSlug ?? await generateUniqueSlug(name);
     final count = (await fetchProfilesForUser(user.id)).length + 1;
 
     final row = await _db
@@ -1845,7 +1929,7 @@ class TeamRepository {
           .length;
       return TeamMemberModel(
         id: id,
-        name: user['full_name'] as String? ?? '',
+        name: user['username'] as String? ?? user['full_name'] as String? ?? '',
         email: user['email'] as String? ?? '',
         role: roleRaw['role'] as String? ?? 'member',
         avatarUrl: user['avatar_url'] as String?,

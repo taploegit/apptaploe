@@ -4,7 +4,13 @@ String nowIso() => DateTime.now().toUtc().toIso8601String();
 
 String slugify(String value) {
   final lower = value.trim().toLowerCase();
-  final replaced = lower
+  final replaced = normalizePublicSlug(lower);
+  if (replaced.length >= 3) return replaced;
+  return 'taploe-${DateTime.now().millisecondsSinceEpoch}';
+}
+
+String normalizePublicSlug(String value) {
+  return value
       .replaceAll(RegExp(r'[áàäâ]'), 'a')
       .replaceAll(RegExp(r'[éèëê]'), 'e')
       .replaceAll(RegExp(r'[íìïî]'), 'i')
@@ -13,8 +19,6 @@ String slugify(String value) {
       .replaceAll('ñ', 'n')
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
-  if (replaced.length >= 3) return replaced;
-  return 'taploe-${DateTime.now().millisecondsSinceEpoch}';
 }
 
 String initials(String value) {

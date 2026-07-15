@@ -22,9 +22,9 @@ Future<void> main() async {
       usePathUrlStrategy();
 
       taploeState.startAuthListener();
-      await taploeState.bootstrap();
-
       runApp(const TaploeApp());
+
+      unawaited(taploeState.bootstrap());
     },
     (error, _) {
       debugPrint('[Taploe] Se capturó un error asíncrono.');

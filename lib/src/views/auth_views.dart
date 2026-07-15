@@ -411,7 +411,7 @@ class _OtpViewState extends State<OtpView> {
       await AuthRepository.verifyOtp(
         email: widget.email,
         token: token,
-        fullName: widget.name,
+        username: widget.name,
       );
 
       await taploeState.bootstrap();
