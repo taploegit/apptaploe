@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
+import '../plan_capabilities.dart';
 import '../profile_public_card.dart';
 import '../repositories.dart';
 import '../theme.dart';
@@ -23,6 +24,9 @@ class _PublicProfileViewState extends State<PublicProfileView> {
   List<SmartFormModel> forms = [];
   Map<String, List<SmartFormFieldModel>> fieldsByFormId = {};
   List<ProfileIntegrationModel> integrations = [];
+  TaploePlanCapabilities capabilities = const TaploePlanCapabilities(
+    TaploePlan.free,
+  );
   bool loading = true;
   bool loggedDirectView = false;
 
@@ -38,9 +42,15 @@ class _PublicProfileViewState extends State<PublicProfileView> {
   Future<void> _load() async {
     final p = await ProfileRepository.fetchProfileBySlug(widget.slug);
     if (p != null) {
+      final profileCapabilities =
+          await ProfileRepository.fetchCapabilitiesForProfile(p);
       final results = await Future.wait<Object>([
-        SmartFormRepository.fetchActiveForms(p.id),
-        IntegrationRepository.fetchForProfile(profileId: p.id),
+        profileCapabilities.canUseForms
+            ? SmartFormRepository.fetchActiveForms(p.id)
+            : Future<List<SmartFormModel>>.value(const []),
+        profileCapabilities.canUseIntegrations
+            ? IntegrationRepository.fetchForProfile(profileId: p.id)
+            : Future<List<ProfileIntegrationModel>>.value(const []),
       ]);
       forms = results[0] as List<SmartFormModel>;
       integrations = results[1] as List<ProfileIntegrationModel>;
@@ -50,6 +60,7 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       fieldsByFormId = {
         for (var i = 0; i < forms.length; i++) forms[i].id: formFields[i],
       };
+      capabilities = profileCapabilities;
       if (channel == null && !loggedDirectView) {
         loggedDirectView = true;
         await SessionStorage.saveVisitorAttribution(
@@ -167,6 +178,11 @@ class _PublicProfileViewState extends State<PublicProfileView> {
                 forms: forms,
                 integrations: integrations,
                 framed: false,
+                allowVerifiedBadge: capabilities.canShowVerifiedBadge,
+                allowCustomDesign: capabilities.canUseDesign,
+                allowForms: capabilities.canUseForms,
+                allowIntegrations: capabilities.canUseIntegrations,
+                showTaploeWatermark: !capabilities.canRemoveTaploeWatermark,
                 onSaveContact: _saveContact,
                 onShare: _shareProfile,
                 onOpenLink: _openLink,

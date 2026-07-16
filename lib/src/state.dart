@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models.dart';
+import 'plan_capabilities.dart';
 import 'repositories.dart';
 import 'utils.dart';
 
@@ -12,6 +13,9 @@ class TaploeState extends ChangeNotifier {
 
   AppUserModel? currentUser;
   OrganizationModel? organization;
+  BillingSubscriptionModel? userSubscription;
+  BillingSubscriptionModel? organizationSubscription;
+  List<BillingInvoiceModel> billingInvoices = [];
   List<DigitalProfileModel> profiles = [];
   List<PhysicalCardModel> cards = [];
   DigitalProfileModel? activeProfile;
@@ -23,6 +27,12 @@ class TaploeState extends ChangeNotifier {
   bool get signedIn => client.auth.currentUser != null && currentUser != null;
   bool get hasLinkedCard => cards.any(_isLinkedCard);
   bool get canAccessDashboard => signedIn && activeProfile != null;
+  TaploePlanCapabilities get capabilities => taploeCapabilitiesFor(
+    user: currentUser,
+    organization: organization,
+    userSubscription: userSubscription,
+    organizationSubscription: organizationSubscription,
+  );
 
   void startAuthListener() {
     _authSubscription ??= client.auth.onAuthStateChange.listen((data) {
@@ -93,6 +103,7 @@ class TaploeState extends ChangeNotifier {
       organization = await UserRepository.firstOrganizationForUser(
         currentUser!.id,
       );
+      await _refreshBilling();
 
       cards = await CardRepository.fetchCardsForUser(currentUser!.id);
       profiles = await _fetchEditableProfiles();
@@ -119,6 +130,11 @@ class TaploeState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateCurrentUser(AppUserModel user) {
+    currentUser = user;
+    notifyListeners();
+  }
+
   Future<void> refreshProfiles() async {
     if (currentUser == null) return;
 
@@ -141,6 +157,7 @@ class TaploeState extends ChangeNotifier {
     final ownProfiles = await ProfileRepository.fetchProfilesForUser(user.id);
     final org = organization;
     if (org == null) return ownProfiles;
+    if (!capabilities.isBusiness) return ownProfiles;
 
     try {
       final members = await TeamRepository.fetchTeam(org.id);
@@ -180,9 +197,17 @@ class TaploeState extends ChangeNotifier {
   Future<void> refreshAll() async {
     if (currentUser == null) return;
 
+    currentUser = await UserRepository.currentAppUser();
+    if (currentUser == null) {
+      _clearSessionState();
+      notifyListeners();
+      return;
+    }
+
     organization = await UserRepository.firstOrganizationForUser(
       currentUser!.id,
     );
+    await _refreshBilling();
 
     await refreshCards();
     await refreshProfiles();
@@ -219,9 +244,34 @@ class TaploeState extends ChangeNotifier {
   void _clearSessionState() {
     currentUser = null;
     organization = null;
+    userSubscription = null;
+    organizationSubscription = null;
+    billingInvoices = [];
     profiles = [];
     cards = [];
     activeProfile = null;
+  }
+
+  Future<void> _refreshBilling() async {
+    final user = currentUser;
+    if (user == null) {
+      userSubscription = null;
+      organizationSubscription = null;
+      billingInvoices = [];
+      return;
+    }
+
+    userSubscription = await BillingRepository.fetchUserSubscription(user.id);
+    final org = organization;
+    organizationSubscription = org == null
+        ? null
+        : await BillingRepository.fetchOrganizationSubscription(org.id);
+
+    final effective = organizationSubscription ?? userSubscription;
+    billingInvoices = await BillingRepository.fetchInvoices(
+      userId: effective?.isOrganizationScope == true ? null : user.id,
+      orgId: effective?.isOrganizationScope == true ? org?.id : null,
+    );
   }
 
   bool _isLinkedCard(PhysicalCardModel card) {

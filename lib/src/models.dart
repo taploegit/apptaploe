@@ -14,6 +14,7 @@ class AppUserModel {
   final String? avatarUrl;
   final String status;
   final String timezone;
+  final String planType;
 
   const AppUserModel({
     required this.id,
@@ -24,6 +25,7 @@ class AppUserModel {
     this.avatarUrl,
     this.status = 'active',
     this.timezone = 'America/Tijuana',
+    this.planType = 'free',
   });
 
   factory AppUserModel.fromJson(Map<String, dynamic> json) => AppUserModel(
@@ -35,6 +37,7 @@ class AppUserModel {
     avatarUrl: json['avatar_url'] as String?,
     status: json['status'] as String? ?? 'active',
     timezone: json['timezone'] as String? ?? 'America/Tijuana',
+    planType: json['plan_type'] as String? ?? 'free',
   );
 
   Map<String, dynamic> toUpsert() => {
@@ -45,6 +48,7 @@ class AppUserModel {
     if (avatarUrl != null) 'avatar_url': avatarUrl,
     'status': status,
     'timezone': timezone,
+    'plan_type': planType,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   };
 }
@@ -211,6 +215,173 @@ class OrganizationSummaryModel {
     required this.clicks,
     required this.leads,
   });
+}
+
+class BillingSubscriptionModel {
+  final String id;
+  final String scope;
+  final String? userId;
+  final String? orgId;
+  final String ownerUserId;
+  final String planType;
+  final String billingInterval;
+  final String status;
+  final bool cancelAtPeriodEnd;
+  final DateTime? trialStart;
+  final DateTime? trialEnd;
+  final DateTime? currentPeriodStart;
+  final DateTime? currentPeriodEnd;
+  final DateTime? graceUntil;
+  final DateTime? canceledAt;
+  final DateTime? endedAt;
+  final String? stripeCustomerId;
+  final String? stripeSubscriptionId;
+  final String? stripePriceId;
+  final String? stripeProductId;
+  final DateTime? lastPaymentAt;
+  final DateTime? nextPaymentAt;
+  final Map<String, dynamic> metadata;
+  final DateTime? createdAt;
+
+  const BillingSubscriptionModel({
+    required this.id,
+    required this.scope,
+    this.userId,
+    this.orgId,
+    required this.ownerUserId,
+    required this.planType,
+    required this.billingInterval,
+    required this.status,
+    this.cancelAtPeriodEnd = false,
+    this.trialStart,
+    this.trialEnd,
+    this.currentPeriodStart,
+    this.currentPeriodEnd,
+    this.graceUntil,
+    this.canceledAt,
+    this.endedAt,
+    this.stripeCustomerId,
+    this.stripeSubscriptionId,
+    this.stripePriceId,
+    this.stripeProductId,
+    this.lastPaymentAt,
+    this.nextPaymentAt,
+    this.metadata = const {},
+    this.createdAt,
+  });
+
+  factory BillingSubscriptionModel.fromJson(Map<String, dynamic> json) =>
+      BillingSubscriptionModel(
+        id: json['id'] as String,
+        scope: json['scope'] as String? ?? 'user',
+        userId: json['user_id'] as String?,
+        orgId: json['org_id'] as String?,
+        ownerUserId: json['owner_user_id'] as String? ?? '',
+        planType: json['plan_type'] as String? ?? 'premium',
+        billingInterval: json['billing_interval'] as String? ?? 'monthly',
+        status: json['status'] as String? ?? 'expired',
+        cancelAtPeriodEnd: json['cancel_at_period_end'] as bool? ?? false,
+        trialStart: _dt(json['trial_start']),
+        trialEnd: _dt(json['trial_end']),
+        currentPeriodStart: _dt(json['current_period_start']),
+        currentPeriodEnd: _dt(json['current_period_end']),
+        graceUntil: _dt(json['grace_until']),
+        canceledAt: _dt(json['canceled_at']),
+        endedAt: _dt(json['ended_at']),
+        stripeCustomerId: json['stripe_customer_id'] as String?,
+        stripeSubscriptionId: json['stripe_subscription_id'] as String?,
+        stripePriceId: json['stripe_price_id'] as String?,
+        stripeProductId: json['stripe_product_id'] as String?,
+        lastPaymentAt: _dt(json['last_payment_at']),
+        nextPaymentAt: _dt(json['next_payment_at']),
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : const {},
+        createdAt: _dt(json['created_at']),
+      );
+
+  bool get isUserScope => scope == 'user';
+  bool get isOrganizationScope => scope == 'organization';
+  bool get isTrialing => status == 'trialing';
+  bool get isActive => status == 'active';
+  bool get isPastDue => status == 'past_due' || status == 'grace_period';
+  bool get isEnded =>
+      status == 'expired' || status == 'canceled' || status == 'unpaid';
+
+  DateTime? get effectiveAccessUntil =>
+      graceUntil ?? currentPeriodEnd ?? trialEnd;
+
+  DateTime? get nextChargeAt => nextPaymentAt ?? currentPeriodEnd ?? trialEnd;
+
+  bool get grantsAccess {
+    if (!(isTrialing || isActive || isPastDue)) return false;
+    final accessUntil = effectiveAccessUntil;
+    return accessUntil == null || accessUntil.isAfter(DateTime.now());
+  }
+}
+
+class BillingInvoiceModel {
+  final String id;
+  final String? subscriptionId;
+  final String? userId;
+  final String? orgId;
+  final String? stripeInvoiceId;
+  final String? stripePaymentIntentId;
+  final String status;
+  final String currency;
+  final double amountDue;
+  final double amountPaid;
+  final double amountRemaining;
+  final String? hostedInvoiceUrl;
+  final String? invoicePdf;
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
+  final DateTime? paidAt;
+  final DateTime? createdAt;
+
+  const BillingInvoiceModel({
+    required this.id,
+    this.subscriptionId,
+    this.userId,
+    this.orgId,
+    this.stripeInvoiceId,
+    this.stripePaymentIntentId,
+    required this.status,
+    required this.currency,
+    required this.amountDue,
+    required this.amountPaid,
+    required this.amountRemaining,
+    this.hostedInvoiceUrl,
+    this.invoicePdf,
+    this.periodStart,
+    this.periodEnd,
+    this.paidAt,
+    this.createdAt,
+  });
+
+  factory BillingInvoiceModel.fromJson(Map<String, dynamic> json) {
+    double money(dynamic value) =>
+        value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
+    return BillingInvoiceModel(
+      id: json['id'] as String,
+      subscriptionId: json['subscription_id'] as String?,
+      userId: json['user_id'] as String?,
+      orgId: json['org_id'] as String?,
+      stripeInvoiceId: json['stripe_invoice_id'] as String?,
+      stripePaymentIntentId: json['stripe_payment_intent_id'] as String?,
+      status: json['status'] as String? ?? 'open',
+      currency: json['currency'] as String? ?? 'MXN',
+      amountDue: money(json['amount_due']),
+      amountPaid: money(json['amount_paid']),
+      amountRemaining: money(json['amount_remaining']),
+      hostedInvoiceUrl: json['hosted_invoice_url'] as String?,
+      invoicePdf: json['invoice_pdf'] as String?,
+      periodStart: _dt(json['period_start']),
+      periodEnd: _dt(json['period_end']),
+      paidAt: _dt(json['paid_at']),
+      createdAt: _dt(json['created_at']),
+    );
+  }
 }
 
 class ProfileThemeModel {

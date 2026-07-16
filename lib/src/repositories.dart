@@ -4,9 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'device_location.dart';
 import 'models.dart';
+import 'plan_capabilities.dart';
 import 'utils.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
+
+const int taploeMaxProfileLinks = 15;
 
 class ProfileAssetRepository {
   static const bucket = 'profile-assets';
@@ -302,6 +305,7 @@ class UserRepository {
         'username': username,
         'email': email,
         'status': 'active',
+        'plan_type': 'free',
         'preferred_language': 'es',
         'timezone': 'America/Tijuana',
       });
@@ -310,6 +314,16 @@ class UserRepository {
     }
 
     return _fetchByAuthUserId(auth.id);
+  }
+
+  static Future<AppUserModel?> fetchById(String userId) async {
+    final row = await _db
+        .from('app_users')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
+    if (row == null) return null;
+    return AppUserModel.fromJson(Map<String, dynamic>.from(row));
   }
 
   static Future<AppUserModel> upsertCurrentUser({
@@ -354,6 +368,7 @@ class UserRepository {
         'username': generatedUsername,
         'email': email.trim().toLowerCase(),
         'status': 'active',
+        'plan_type': 'free',
         'preferred_language': 'es',
         'timezone': 'America/Tijuana',
         'last_login_at': nowIso(),
@@ -499,6 +514,103 @@ class UserRepository {
     await ProfileRepository.ensureInitialRecords(profile, user);
 
     return (await ProfileRepository.fetchProfileById(profileId))!;
+  }
+}
+
+class BillingRepository {
+  static const _subscriptionSelect = '''
+    id,scope,user_id,org_id,owner_user_id,plan_type,billing_interval,status,
+    cancel_at_period_end,trial_start,trial_end,current_period_start,
+    current_period_end,grace_until,canceled_at,ended_at,stripe_customer_id,
+    stripe_subscription_id,stripe_price_id,stripe_product_id,last_payment_at,
+    next_payment_at,metadata,created_at
+  ''';
+
+  static const _invoiceSelect = '''
+    id,subscription_id,user_id,org_id,stripe_invoice_id,
+    stripe_payment_intent_id,status,currency,amount_due,amount_paid,
+    amount_remaining,hosted_invoice_url,invoice_pdf,period_start,period_end,
+    paid_at,created_at
+  ''';
+
+  static Future<BillingSubscriptionModel?> fetchUserSubscription(
+    String userId,
+  ) async {
+    try {
+      final row = await _db
+          .from('billing_subscriptions')
+          .select(_subscriptionSelect)
+          .eq('scope', 'user')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (row == null) return null;
+      return BillingSubscriptionModel.fromJson(Map<String, dynamic>.from(row));
+    } catch (error) {
+      debugPrint('[TaploeBilling] No se pudo cargar suscripción individual.');
+      safePrintError(error);
+      return null;
+    }
+  }
+
+  static Future<BillingSubscriptionModel?> fetchOrganizationSubscription(
+    String orgId,
+  ) async {
+    try {
+      final row = await _db
+          .from('billing_subscriptions')
+          .select(_subscriptionSelect)
+          .eq('scope', 'organization')
+          .eq('org_id', orgId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (row == null) return null;
+      return BillingSubscriptionModel.fromJson(Map<String, dynamic>.from(row));
+    } catch (error) {
+      debugPrint('[TaploeBilling] No se pudo cargar suscripción de empresa.');
+      safePrintError(error);
+      return null;
+    }
+  }
+
+  static Future<List<BillingInvoiceModel>> fetchInvoices({
+    String? userId,
+    String? orgId,
+    int limit = 12,
+  }) async {
+    try {
+      List rows;
+      if (orgId != null && orgId.isNotEmpty) {
+        rows = await _db
+            .from('billing_invoices')
+            .select(_invoiceSelect)
+            .eq('org_id', orgId)
+            .order('created_at', ascending: false)
+            .limit(limit);
+      } else if (userId != null && userId.isNotEmpty) {
+        rows = await _db
+            .from('billing_invoices')
+            .select(_invoiceSelect)
+            .eq('user_id', userId)
+            .order('created_at', ascending: false)
+            .limit(limit);
+      } else {
+        return const [];
+      }
+      return rows
+          .map(
+            (row) => BillingInvoiceModel.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList();
+    } catch (error) {
+      debugPrint('[TaploeBilling] No se pudo cargar historial de pagos.');
+      safePrintError(error);
+      return const [];
+    }
   }
 }
 
@@ -959,6 +1071,27 @@ class ProfileRepository {
     );
   }
 
+  static Future<TaploePlanCapabilities> fetchCapabilitiesForProfile(
+    DigitalProfileModel profile,
+  ) async {
+    final results = await Future.wait<Object?>([
+      UserRepository.fetchById(profile.ownerUserId),
+      profile.orgId == null || profile.orgId!.isEmpty
+          ? Future<OrganizationModel?>.value(null)
+          : OrganizationRepository.fetchById(profile.orgId!),
+      BillingRepository.fetchUserSubscription(profile.ownerUserId),
+      profile.orgId == null || profile.orgId!.isEmpty
+          ? Future<BillingSubscriptionModel?>.value(null)
+          : BillingRepository.fetchOrganizationSubscription(profile.orgId!),
+    ]);
+    return taploeCapabilitiesFor(
+      user: results[0] as AppUserModel?,
+      organization: results[1] as OrganizationModel?,
+      userSubscription: results[2] as BillingSubscriptionModel?,
+      organizationSubscription: results[3] as BillingSubscriptionModel?,
+    );
+  }
+
   static ProfileThemeModel _themeForProfile(
     ProfileThemeModel theme,
     String profileId,
@@ -998,7 +1131,24 @@ class ProfileRepository {
       throw ArgumentError('profile_slug_taken');
     }
     final slug = requestedSlug ?? await generateUniqueSlug(name);
-    final count = (await fetchProfilesForUser(user.id)).length + 1;
+    final existingProfiles = await fetchProfilesForUser(user.id);
+    final org = await UserRepository.firstOrganizationForUser(user.id);
+    final userSubscription = await BillingRepository.fetchUserSubscription(
+      user.id,
+    );
+    final organizationSubscription = org == null
+        ? null
+        : await BillingRepository.fetchOrganizationSubscription(org.id);
+    final capabilities = taploeCapabilitiesFor(
+      user: user,
+      organization: org,
+      userSubscription: userSubscription,
+      organizationSubscription: organizationSubscription,
+    );
+    if (!capabilities.canCreateProfile(existingProfiles.length)) {
+      throw ArgumentError('profile_limit_reached');
+    }
+    final count = existingProfiles.length + 1;
 
     final row = await _db
         .from('digital_profiles')
@@ -1068,6 +1218,15 @@ class ProfileRepository {
     Map<String, dynamic> metadata = const {},
     int sortOrder = 0,
   }) async {
+    final existing = await _db
+        .from('profile_links')
+        .select('id')
+        .eq('profile_id', profileId)
+        .limit(taploeMaxProfileLinks);
+    if (existing.length >= taploeMaxProfileLinks) {
+      throw ArgumentError('profile_link_limit_reached');
+    }
+
     final row = await _db
         .from('profile_links')
         .insert({

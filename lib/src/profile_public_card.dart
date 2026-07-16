@@ -20,6 +20,11 @@ class TaploePublicProfileCard extends StatefulWidget {
   final Widget Function(SmartFormModel form)? formBuilder;
   final Widget? installPanel;
   final bool framed;
+  final bool allowVerifiedBadge;
+  final bool allowCustomDesign;
+  final bool allowForms;
+  final bool allowIntegrations;
+  final bool showTaploeWatermark;
 
   const TaploePublicProfileCard({
     super.key,
@@ -35,6 +40,11 @@ class TaploePublicProfileCard extends StatefulWidget {
     this.formBuilder,
     this.installPanel,
     this.framed = false,
+    this.allowVerifiedBadge = true,
+    this.allowCustomDesign = true,
+    this.allowForms = true,
+    this.allowIntegrations = true,
+    this.showTaploeWatermark = false,
   });
 
   @override
@@ -85,10 +95,12 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
               !_isSocialOrWebsiteLink(link),
         )
         .toList();
-    final visibleForms = forms.where((form) => form.isActive).toList();
-    final visibleIntegrations = integrations
-        .where((integration) => integration.isEnabled)
-        .toList();
+    final visibleForms = widget.allowForms
+        ? forms.where((form) => form.isActive).toList()
+        : <SmartFormModel>[];
+    final visibleIntegrations = widget.allowIntegrations
+        ? integrations.where((integration) => integration.isEnabled).toList()
+        : <ProfileIntegrationModel>[];
     final calendarIntegrations = visibleIntegrations
         .where(
           (integration) =>
@@ -99,9 +111,11 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
     final calendarIntegration = calendarIntegrations.isEmpty
         ? null
         : calendarIntegrations.first;
-    final coverUrl = profile.coverPhotoUrl;
-    final logoUrl = profile.logoUrl;
-    final theme = profile.theme ?? ProfileThemeModel(profileId: profile.id);
+    final coverUrl = widget.allowCustomDesign ? profile.coverPhotoUrl : null;
+    final logoUrl = widget.allowCustomDesign ? profile.logoUrl : null;
+    final theme = widget.allowCustomDesign
+        ? profile.theme ?? ProfileThemeModel(profileId: profile.id)
+        : ProfileThemeModel(profileId: profile.id);
     final primaryColor = _colorFromHex(
       theme.primaryColor,
       fallback: TaploeColors.blue,
@@ -209,11 +223,13 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
           Positioned(
             top: framed ? 52 : 56,
             child: logoUrl == null || logoUrl.isEmpty
-                ? TaploeLogo(
-                    size: framed ? 40 : 48,
-                    centered: true,
-                    color: TaploeColors.black,
-                  )
+                ? widget.showTaploeWatermark
+                      ? TaploeLogo(
+                          size: framed ? 40 : 48,
+                          centered: true,
+                          color: TaploeColors.black,
+                        )
+                      : SizedBox(height: framed ? 44 : 52)
                 : Image.network(
                     logoUrl,
                     height: framed ? 44 : 52,
@@ -266,7 +282,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                 style: headingStyle,
               ),
             ),
-            if (profile.showVerifiedBadge) ...[
+            if (widget.allowVerifiedBadge && profile.showVerifiedBadge) ...[
               const SizedBox(width: 8),
               Icon(
                 Icons.verified_rounded,
@@ -561,6 +577,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ),
         padding: const EdgeInsets.fromLTRB(11, 15, 11, 11),
         child: Stack(
+          fit: StackFit.expand,
           alignment: Alignment.topCenter,
           children: [
             ClipRRect(borderRadius: BorderRadius.circular(39), child: surface),

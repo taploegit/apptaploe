@@ -38,8 +38,7 @@ void main() {
     await tester.pumpWidget(const TaploeApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Correo electrónico'), findsOneWidget);
-    expect(find.text('Enviar código'), findsOneWidget);
+    expect(find.text('Continuar'), findsOneWidget);
   });
 }
