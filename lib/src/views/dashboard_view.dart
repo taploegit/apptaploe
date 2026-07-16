@@ -637,7 +637,7 @@ class _AnalyticsPremiumActivationCard extends StatelessWidget {
               children: [
                 TaploeButton(
                   width: 220,
-                  label: 'Actualizar a Premium',
+                  label: 'Elegir plan ideal',
                   icon: Icons.workspace_premium_rounded,
                   onPressed: () => _showPlansDialog(context),
                 ),
@@ -948,9 +948,7 @@ class _LockedActivationCard extends StatelessWidget {
               children: [
                 TaploeButton(
                   width: 220,
-                  label: requiredPlan == 'Empresa'
-                      ? 'Actualizar a Empresa'
-                      : 'Actualizar a Premium',
+                  label: 'Elegir plan ideal',
                   icon: Icons.workspace_premium_rounded,
                   onPressed: () => _showPlansDialog(context),
                 ),
@@ -3434,7 +3432,7 @@ class _EntryDialogPlanContent extends StatelessWidget {
   }
 }
 
-class _EntryDialogCheckoutContent extends StatelessWidget {
+class _EntryDialogCheckoutContent extends StatefulWidget {
   final bool mobile;
   final _EntryDialogPlan plan;
   final _EntryBillingCycle billingCycle;
@@ -3450,13 +3448,57 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
   });
 
   @override
+  State<_EntryDialogCheckoutContent> createState() =>
+      _EntryDialogCheckoutContentState();
+}
+
+class _EntryDialogCheckoutContentState
+    extends State<_EntryDialogCheckoutContent> {
+  bool loadingCheckout = false;
+
+  Future<void> _completePurchase() async {
+    if (loadingCheckout) return;
+    setState(() => loadingCheckout = true);
+    try {
+      final isTeam = widget.plan == _EntryDialogPlan.team;
+      final checkoutUrl = await BillingRepository.createCheckoutSession(
+        plan: isTeam ? 'business' : 'premium',
+        billingPeriod: widget.billingCycle == _EntryBillingCycle.annual
+            ? 'annual'
+            : 'monthly',
+        quantity: isTeam ? 5 : 1,
+        language: taploeState.localeConfig.languageCode,
+        market: taploeState.localeConfig.marketCode,
+        locale: taploeState.localeConfig.localeCode,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await _openStripeUrl(context, checkoutUrl);
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(
+          context,
+          taploeState.t.text(
+            'No pudimos iniciar Checkout. Si ya tienes una suscripción, adminístrala desde Facturación.',
+            'We could not start Checkout. If you already have a subscription, manage it from Billing.',
+          ),
+          error: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loadingCheckout = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isTeam = plan == _EntryDialogPlan.team;
+    final isTeam = widget.plan == _EntryDialogPlan.team;
     const trialDays = 7;
     final title = isTeam
         ? 'Prueba Taploe Empresas gratis'
         : 'Prueba Taploe Premium gratis';
-    final annualSelected = billingCycle == _EntryBillingCycle.annual;
+    final annualSelected = widget.billingCycle == _EntryBillingCycle.annual;
     const dueDate = '21 de julio de 2026';
     final amount = isTeam
         ? annualSelected
@@ -3477,30 +3519,30 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        mobile ? 24 : 44,
-        mobile ? 24 : 34,
-        mobile ? 24 : 44,
-        mobile ? 28 : 34,
+        widget.mobile ? 24 : 44,
+        widget.mobile ? 24 : 34,
+        widget.mobile ? 24 : 44,
+        widget.mobile ? 28 : 34,
       ),
       child: Column(
-        mainAxisSize: mobile ? MainAxisSize.min : MainAxisSize.max,
+        mainAxisSize: widget.mobile ? MainAxisSize.min : MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!mobile)
+          if (!widget.mobile)
             Align(
               alignment: Alignment.centerLeft,
               child: IconButton(
                 tooltip: 'Volver',
-                onPressed: onBack,
+                onPressed: widget.onBack,
                 icon: const Icon(Icons.arrow_back_rounded, size: 28),
               ),
             ),
-          SizedBox(height: mobile ? 12 : 22),
+          SizedBox(height: widget.mobile ? 12 : 22),
           Text(
             title,
             style: GoogleFonts.outfit(
               color: context.text,
-              fontSize: mobile ? 34 : 36,
+              fontSize: widget.mobile ? 34 : 36,
               fontWeight: FontWeight.w600,
               height: 1.05,
             ),
@@ -3513,24 +3555,24 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
           const _TrialCheckLine(
             'Te recordaremos antes de que termine tu prueba.',
           ),
-          SizedBox(height: mobile ? 30 : 28),
+          SizedBox(height: widget.mobile ? 30 : 28),
           _BillingOption(
             value: _EntryBillingCycle.annual,
-            groupValue: billingCycle,
+            groupValue: widget.billingCycle,
             title: 'Anual',
             price: annualPrice,
             badge: badge,
-            onChanged: onBillingCycleChanged,
+            onChanged: widget.onBillingCycleChanged,
           ),
           const SizedBox(height: 18),
           _BillingOption(
             value: _EntryBillingCycle.monthly,
-            groupValue: billingCycle,
+            groupValue: widget.billingCycle,
             title: 'Mensual',
             price: monthlyPrice,
-            onChanged: onBillingCycleChanged,
+            onChanged: widget.onBillingCycleChanged,
           ),
-          SizedBox(height: mobile ? 18 : 10),
+          SizedBox(height: widget.mobile ? 18 : 10),
           if (isTeam)
             Align(
               alignment: Alignment.centerRight,
@@ -3543,7 +3585,7 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
                 ),
               ),
             ),
-          Divider(height: mobile ? 30 : 24, color: TaploeColors.border),
+          Divider(height: widget.mobile ? 30 : 24, color: TaploeColors.border),
           _CheckoutRow(label: 'Vence el $dueDate', value: amount),
           const SizedBox(height: 10),
           _CheckoutRow(
@@ -3555,7 +3597,8 @@ class _EntryDialogCheckoutContent extends StatelessWidget {
           TaploeButton(
             label: 'Completar compra',
             expanded: true,
-            onPressed: () => Navigator.of(context).pop(),
+            loading: loadingCheckout,
+            onPressed: _completePurchase,
           ),
         ],
       ),
@@ -5716,7 +5759,7 @@ class _Sidebar extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Actualizar a Premium',
+                          'Elegir plan ideal',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.dmSans(
@@ -5864,7 +5907,8 @@ void _showPlansDialog(BuildContext context) {
   showDialog<void>(
     context: context,
     barrierDismissible: true,
-    builder: (context) => const _StripePlansDialog(),
+    builder: (context) =>
+        const _DashboardEntryDialog(initialShowPlanComparison: true),
   );
 }
 
@@ -5929,385 +5973,6 @@ Future<void> _openBillingPortal(
         error: true,
       );
     }
-  }
-}
-
-class _StripePlansDialog extends StatefulWidget {
-  const _StripePlansDialog();
-
-  @override
-  State<_StripePlansDialog> createState() => _StripePlansDialogState();
-}
-
-class _StripePlansDialogState extends State<_StripePlansDialog> {
-  String _plan = 'premium';
-  String _billingPeriod = 'monthly';
-  int _businessQuantity = 5;
-  bool _loading = false;
-
-  double get _premiumPrice {
-    final mx = taploeState.localeConfig.market == TaploeMarket.mx;
-    if (mx) return _billingPeriod == 'annual' ? 1759 : 199;
-    return _billingPeriod == 'annual' ? 87.99 : 9.99;
-  }
-
-  double get _businessPrice {
-    final mx = taploeState.localeConfig.market == TaploeMarket.mx;
-    if (mx) return _billingPeriod == 'annual' ? 879 : 99;
-    return _billingPeriod == 'annual' ? 43.99 : 4.99;
-  }
-
-  String _price(double value) {
-    final currency = taploeState.localeConfig.currencyCode;
-    if (currency == 'MXN') return '\$${value.toStringAsFixed(0)} MXN';
-    return '\$${value.toStringAsFixed(2)} USD';
-  }
-
-  Future<void> _startCheckout() async {
-    setState(() => _loading = true);
-    try {
-      final checkoutUrl = await BillingRepository.createCheckoutSession(
-        plan: _plan,
-        billingPeriod: _billingPeriod,
-        quantity: _plan == 'premium' ? 1 : _businessQuantity,
-        language: taploeState.localeConfig.languageCode,
-        market: taploeState.localeConfig.marketCode,
-        locale: taploeState.localeConfig.localeCode,
-      );
-      if (!mounted) return;
-      Navigator.pop(context);
-      await _openStripeUrl(context, checkoutUrl);
-    } catch (error) {
-      safePrintError(error);
-      if (mounted) {
-        taploeToast(
-          context,
-          'No pudimos iniciar Checkout. Si ya tienes una suscripción, adminístrala desde Facturación.',
-          error: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final annual = _billingPeriod == 'annual';
-    final t = taploeState.t;
-    return TaploeModalShell(
-      title: t.choosePlan,
-      subtitle: t.checkoutCurrencyNotice,
-      maxWidth: 880,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _BillingPeriodChip(
-                selected: !annual,
-                label: t.monthly,
-                onTap: () => setState(() => _billingPeriod = 'monthly'),
-              ),
-              _BillingPeriodChip(
-                selected: annual,
-                label: t.annual,
-                onTap: () => setState(() => _billingPeriod = 'annual'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final narrow = constraints.maxWidth < 720;
-              final cards = [
-                _StripePlanCard(
-                  selected: _plan == 'premium',
-                  title: 'Taploe Premium',
-                  price:
-                      '${_price(_premiumPrice)} ${annual ? t.perYear : t.perMonth}',
-                  description: t.premiumDescription,
-                  bullets: [
-                    t.text(
-                      'Hasta 5 perfiles digitales',
-                      'Up to 5 digital profiles',
-                    ),
-                    t.text(
-                      'Diseño avanzado y analíticas',
-                      'Advanced design and analytics',
-                    ),
-                    t.text('Perfil sin marca Taploe', 'Taploe-free profile'),
-                  ],
-                  onTap: () => setState(() => _plan = 'premium'),
-                ),
-                _StripePlanCard(
-                  selected: _plan == 'business',
-                  title: 'Taploe Business',
-                  price:
-                      '${_price(_businessPrice)} ${annual ? t.perProfilePerYear : t.perProfilePerMonth}',
-                  description: t.businessDescription,
-                  bullets: [
-                    t.text('Mínimo 5 perfiles', 'Minimum 5 profiles'),
-                    t.text('Administración de equipo', 'Team administration'),
-                    t.text(
-                      'Identidad visual compartida',
-                      'Shared brand identity',
-                    ),
-                  ],
-                  onTap: () => setState(() => _plan = 'business'),
-                ),
-              ];
-              if (narrow) {
-                return Column(
-                  children: [
-                    for (final card in cards) ...[
-                      card,
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 12),
-                  Expanded(child: cards[1]),
-                ],
-              );
-            },
-          ),
-          if (_plan == 'business') ...[
-            const SizedBox(height: 16),
-            _BusinessQuantitySelector(
-              quantity: _businessQuantity,
-              unitPrice: _businessPrice,
-              annual: annual,
-              onChanged: (value) => setState(() => _businessQuantity = value),
-            ),
-          ],
-          const SizedBox(height: 16),
-          _MutedText(t.stripeTruthNotice),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: TaploeButton(
-                  label: _loading ? t.openingStripe : t.continueToStripe,
-                  icon: Icons.open_in_new_rounded,
-                  loading: _loading,
-                  onPressed: _startCheckout,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BillingPeriodChip extends StatelessWidget {
-  final bool selected;
-  final String label;
-  final VoidCallback onTap;
-
-  const _BillingPeriodChip({
-    required this.selected,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      selected: selected,
-      label: Text(label),
-      onSelected: (_) => onTap(),
-      selectedColor: TaploeColors.blue.withValues(alpha: .12),
-      labelStyle: GoogleFonts.dmSans(
-        color: selected ? TaploeColors.blue : context.text,
-        fontWeight: FontWeight.w800,
-      ),
-      side: BorderSide(
-        color: selected ? TaploeColors.blue : TaploeColors.border,
-      ),
-    );
-  }
-}
-
-class _StripePlanCard extends StatelessWidget {
-  final bool selected;
-  final String title;
-  final String price;
-  final String description;
-  final List<String> bullets;
-  final VoidCallback onTap;
-
-  const _StripePlanCard({
-    required this.selected,
-    required this.title,
-    required this.price,
-    required this.description,
-    required this.bullets,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: selected
-              ? TaploeColors.blue.withValues(alpha: .06)
-              : TaploeColors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? TaploeColors.blue : TaploeColors.border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  selected
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: selected ? TaploeColors.blue : context.muted,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      color: context.text,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              price,
-              style: GoogleFonts.dmSans(
-                color: TaploeColors.blue,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              description,
-              style: GoogleFonts.dmSans(
-                color: context.muted,
-                fontWeight: FontWeight.w600,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 12),
-            for (final bullet in bullets)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: TaploeColors.success,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        bullet,
-                        style: GoogleFonts.dmSans(
-                          color: context.text,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BusinessQuantitySelector extends StatelessWidget {
-  final int quantity;
-  final double unitPrice;
-  final bool annual;
-  final ValueChanged<int> onChanged;
-
-  const _BusinessQuantitySelector({
-    required this.quantity,
-    required this.unitPrice,
-    required this.annual,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final subtotal = unitPrice * quantity;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: TaploeColors.page,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: TaploeColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.groups_2_outlined, color: TaploeColors.blue),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$quantity perfiles',
-                  style: GoogleFonts.dmSans(
-                    color: context.text,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Subtotal informativo: \$${subtotal.toStringAsFixed(2)} USD ${annual ? 'al año' : 'al mes'}',
-                  style: GoogleFonts.dmSans(
-                    color: context.muted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Quitar perfil',
-            onPressed: quantity > 5 ? () => onChanged(quantity - 1) : null,
-            icon: const Icon(Icons.remove_rounded),
-          ),
-          IconButton(
-            tooltip: 'Agregar perfil',
-            onPressed: quantity < 500 ? () => onChanged(quantity + 1) : null,
-            icon: const Icon(Icons.add_rounded),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -12342,9 +12007,7 @@ class _PlanFeatureLockedPanel extends StatelessWidget {
                   children: [
                     TaploeButton(
                       width: 210,
-                      label: requiredPlan == 'Empresa'
-                          ? 'Actualizar a Empresa'
-                          : 'Actualizar a Premium',
+                      label: 'Elegir plan ideal',
                       icon: Icons.workspace_premium_rounded,
                       onPressed: () => _showPlansDialog(context),
                     ),
