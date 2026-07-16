@@ -10085,6 +10085,96 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
     }
   }
 
+  Future<void> uploadCompanyLogoFromDesign() async {
+    final p = taploeState.activeProfile;
+    final org = taploeState.organization;
+    final authUserId = taploeState.client.auth.currentUser?.id;
+    if (p == null || org == null || authUserId == null) return;
+    if (!_isCompanyLinkedProfile(p)) return;
+    if (!_canEditProfile(p)) {
+      taploeToast(
+        context,
+        'Solo puedes actualizar tu perfil o perfiles que administras.',
+        error: true,
+      );
+      return;
+    }
+    if (org.enforceTeamProfileTheme) {
+      taploeToast(
+        context,
+        'El diseño corporativo está administrado desde Administración.',
+        error: true,
+      );
+      return;
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _profileAssetAllowedExtensions,
+      withData: true,
+      allowMultiple: false,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+    if (!_isAllowedProfileAsset(file.name)) {
+      if (mounted) {
+        taploeToast(
+          context,
+          'Solo puedes cargar imágenes JPG, PNG, WEBP, HEIC, HEIF o SVG.',
+          error: true,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    Uint8List editorBytes;
+    try {
+      editorBytes = _isSvgProfileAsset(file.name)
+          ? await _rasterizeSvgToPng(context, bytes, kind: 'logo')
+          : bytes;
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(
+          context,
+          'No pudimos convertir el SVG a imagen. Revisa el archivo.',
+          error: true,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final editedBytes = await _showProfileAssetEditor(
+      context,
+      kind: 'logo',
+      bytes: editorBytes,
+    );
+    if (editedBytes == null) return;
+
+    setState(() => uploadingAsset = 'company-logo');
+    try {
+      final url = await OrganizationAssetRepository.uploadCompanyLogo(
+        authUserId: authUserId,
+        bytes: editedBytes,
+        fileName: 'company-logo.jpg',
+      );
+      await OrganizationRepository.updateCompanyLogo(org: org, logoUrl: url);
+      logo.text = url;
+      await taploeState.refreshAll();
+      if (mounted) taploeToast(context, 'Logo de empresa actualizado.');
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(context, 'No pudimos actualizar el logo.', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => uploadingAsset = null);
+    }
+  }
+
   DigitalProfileModel _previewProfile(DigitalProfileModel profile) {
     final capabilities = taploeState.capabilities;
     final links =
@@ -10286,8 +10376,13 @@ class _ProfileEditorViewState extends State<ProfileEditorView> {
                   uploadingAsset: uploadingAsset,
                   onUploadProfilePhoto: () =>
                       uploadProfileAsset('profile-photo', profilePhoto),
-                  onUploadLogo: () => uploadProfileAsset('logo', logo),
-                  onManageCompanyLogo: widget.onManageCompanyLogo,
+                  onUploadLogo: _isCompanyLinkedProfile(p)
+                      ? uploadCompanyLogoFromDesign
+                      : () => uploadProfileAsset('logo', logo),
+                  onManageCompanyLogo:
+                      _isCompanyLinkedProfile(p) && !_teamDesignLocked
+                      ? uploadCompanyLogoFromDesign
+                      : widget.onManageCompanyLogo,
                   companyLogoUrl: _companyLogoUrlFor(p),
                   companyLinked: _isCompanyLinkedProfile(p),
                   onUploadCover: () => uploadProfileAsset('cover', cover),
@@ -12162,6 +12257,7 @@ class _DesignStudio extends StatelessWidget {
           if (companyLogoManaged) ...[
             _CompanyManagedLogoCard(
               logoUrl: companyLogoUrl,
+              loading: uploadingAsset == 'company-logo',
               onPressed: onManageCompanyLogo,
             ),
             const SizedBox(height: 14),
@@ -14136,10 +14232,12 @@ class _ProfileAssetPicker extends StatelessWidget {
 
 class _CompanyManagedLogoCard extends StatelessWidget {
   final String? logoUrl;
+  final bool loading;
   final VoidCallback? onPressed;
 
   const _CompanyManagedLogoCard({
     required this.logoUrl,
+    this.loading = false,
     required this.onPressed,
   });
 
@@ -14192,8 +14290,8 @@ class _CompanyManagedLogoCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   hasLogo
-                      ? 'Se usa el logo principal de Administración'
-                      : 'Agrega el logo principal desde Administración',
+                      ? 'Se usa como logo principal de la empresa.'
+                      : 'Carga el logo principal para tus perfiles de empresa.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(color: context.muted, fontSize: 12),
@@ -14204,10 +14302,15 @@ class _CompanyManagedLogoCard extends StatelessWidget {
           const SizedBox(width: 10),
           TaploeButton(
             width: 170,
-            label: hasLogo ? 'Modificar logo' : 'Cargar logo',
+            label: loading
+                ? 'Cargando...'
+                : hasLogo
+                ? 'Modificar logo'
+                : 'Cargar logo',
             icon: Icons.business_center_outlined,
             kind: TaploeButtonKind.secondary,
-            onPressed: onPressed,
+            loading: loading,
+            onPressed: loading ? null : onPressed,
           ),
         ],
       ),
