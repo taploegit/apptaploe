@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'localization.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'utils.dart';
@@ -67,6 +68,9 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
   @override
   Widget build(BuildContext context) {
     final profile = widget.profile;
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(profile.publicLocale),
+    );
     final links = widget.links;
     final forms = widget.forms;
     final integrations = widget.integrations;
@@ -315,7 +319,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ],
         SizedBox(height: framed ? 16 : 22),
         _PublicActionButton(
-          label: 'Save contact',
+          label: t.saveContact,
           icon: Icons.person_add_alt_1_rounded,
           primary: true,
           primaryColor: actionColor,
@@ -331,7 +335,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         SizedBox(height: framed ? 10 : 14),
         if (emailLink == null)
           _PublicActionButton(
-            label: 'Share',
+            label: t.share,
             icon: Icons.share_rounded,
             primaryColor: primaryColor,
             accentColor: accentColor,
@@ -348,7 +352,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             children: [
               Expanded(
                 child: _PublicActionButton(
-                  label: 'Send mail',
+                  label: t.sendMail,
                   icon: Icons.email_rounded,
                   primaryColor: primaryColor,
                   accentColor: accentColor,
@@ -364,7 +368,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
               SizedBox(width: framed ? 8 : 12),
               Expanded(
                 child: _PublicActionButton(
-                  label: 'Share',
+                  label: t.share,
                   icon: Icons.share_rounded,
                   primaryColor: primaryColor,
                   accentColor: accentColor,
@@ -385,7 +389,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ],
         if (socialLinks.isNotEmpty) ...[
           SizedBox(height: framed ? 18 : 24),
-          _SectionTitle('Connect with me', style: sectionStyle),
+          _SectionTitle(t.connectWithMe, style: sectionStyle),
           SizedBox(height: framed ? 10 : 14),
           Wrap(
             spacing: framed ? 10 : 14,
@@ -404,7 +408,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ],
         if (directLinks.isNotEmpty) ...[
           SizedBox(height: framed ? 18 : 24),
-          _SectionTitle('Contact', style: sectionStyle),
+          _SectionTitle(t.contact, style: sectionStyle),
           SizedBox(height: framed ? 10 : 14),
           for (final link in directLinks) ...[
             _PublicActionButton(
@@ -428,16 +432,16 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ],
         if (calendarLink != null || calendarIntegration != null) ...[
           SizedBox(height: framed ? 18 : 24),
-          _SectionTitle('Schedule a meeting', style: sectionStyle),
+          _SectionTitle(t.scheduleMeeting, style: sectionStyle),
           SizedBox(height: framed ? 10 : 14),
           _PublicActionButton(
             label: calendarLink != null
                 ? (calendarLink.label.isEmpty
-                      ? 'Schedule meeting'
+                      ? t.scheduleMeeting
                       : calendarLink.label)
                 : (calendarIntegration?.displayLabel?.isNotEmpty == true
                       ? calendarIntegration!.displayLabel!
-                      : 'Schedule meeting'),
+                      : t.scheduleMeeting),
             icon: Icons.calendar_month_rounded,
             trailing: Icons.arrow_forward_rounded,
             primary: true,
@@ -465,7 +469,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
             )
             .isNotEmpty) ...[
           SizedBox(height: framed ? 18 : 26),
-          _SectionTitle('Tools', style: sectionStyle),
+          _SectionTitle(t.tools, style: sectionStyle),
           SizedBox(height: framed ? 10 : 12),
           Wrap(
             spacing: framed ? 8 : 10,
@@ -478,7 +482,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                   label:
                       integration.displayLabel ??
                       integration.integration?.provider ??
-                      'Integración',
+                      t.text('Integración', 'Integration'),
                   icon: _integrationIcon(
                     integration.integration?.integrationType,
                   ),
@@ -494,7 +498,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
         ],
         if (visibleForms.isNotEmpty) ...[
           SizedBox(height: framed ? 18 : 26),
-          _SectionTitle('Contact form', style: sectionStyle),
+          _SectionTitle(t.contactForm, style: sectionStyle),
           SizedBox(height: framed ? 10 : 12),
           for (final form in visibleForms.take(2)) ...[
             _PublicFormDropdown(

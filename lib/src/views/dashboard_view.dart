@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../company_logo_drop.dart';
+import '../localization.dart';
 import '../models.dart';
 import '../plan_capabilities.dart';
 import '../profile_public_card.dart';
@@ -61,6 +62,11 @@ bool _canEditProfile(DigitalProfileModel? profile) {
   if (profile == null) return false;
   return taploeState.profiles.any((item) => item.id == profile.id);
 }
+
+bool _hasActivePaidPlan() => taploeState.capabilities.hasPremiumFeatures;
+
+BillingSubscriptionModel? _effectiveBillingSubscription() =>
+    taploeState.organizationSubscription ?? taploeState.userSubscription;
 
 bool _canViewDashboardSection(DashboardSection section) {
   final capabilities = taploeState.capabilities;
@@ -124,6 +130,7 @@ class _DashboardViewState extends State<DashboardView> {
   void _maybeShowEntryDialog() {
     if (!mounted || _entryDialogShown) return;
     if (taploeState.bootstrapping || !taploeState.canAccessDashboard) return;
+    if (_hasActivePaidPlan()) return;
     if (_showInitialCardLinkPrompt && !taploeState.hasLinkedCard) return;
     _entryDialogShown = true;
     showDialog<void>(
@@ -5533,24 +5540,25 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = taploeState.t;
     final items = [
-      (DashboardSection.home, Icons.space_dashboard_outlined, 'Inicio'),
+      (DashboardSection.home, Icons.space_dashboard_outlined, t.home),
       (
         DashboardSection.profile,
         Icons.person_outline_rounded,
-        'Perfil digital',
+        t.digitalProfile,
       ),
-      (DashboardSection.cards, Icons.credit_card_rounded, 'Tarjetas'),
-      (DashboardSection.share, Icons.ios_share_rounded, 'Compartir'),
-      (DashboardSection.analytics, Icons.insights_rounded, 'Analítica'),
+      (DashboardSection.cards, Icons.credit_card_rounded, t.cards),
+      (DashboardSection.share, Icons.ios_share_rounded, t.share),
+      (DashboardSection.analytics, Icons.insights_rounded, t.analytics),
       (DashboardSection.leads, Icons.handshake_outlined, 'Leads'),
-      (DashboardSection.team, Icons.groups_outlined, 'Equipo'),
+      (DashboardSection.team, Icons.groups_outlined, t.team),
       (
         DashboardSection.admin,
         Icons.admin_panel_settings_outlined,
-        'Administración',
+        t.administration,
       ),
-      (DashboardSection.settings, Icons.settings_outlined, 'Configuración'),
+      (DashboardSection.settings, Icons.settings_outlined, t.settings),
     ];
     final user = taploeState.currentUser;
     return Container(
@@ -5848,12 +5856,459 @@ Future<void> _showCardLinkingDialog(BuildContext context) async {
 }
 
 void _showPlansDialog(BuildContext context) {
+  if (_hasActivePaidPlan()) {
+    _showCurrentPlanManagement(context);
+    return;
+  }
+
   showDialog<void>(
     context: context,
     barrierDismissible: true,
-    builder: (context) =>
-        const _DashboardEntryDialog(initialShowPlanComparison: true),
+    builder: (context) => const _StripePlansDialog(),
   );
+}
+
+void _showCurrentPlanManagement(BuildContext context) {
+  final subscription = _effectiveBillingSubscription();
+  final user = taploeState.currentUser;
+  final ownerCanManage =
+      user != null &&
+      (subscription == null ||
+          subscription.ownerUserId.isEmpty ||
+          subscription.ownerUserId == user.id);
+
+  if (subscription?.stripeCustomerId?.trim().isNotEmpty == true &&
+      ownerCanManage) {
+    _openBillingPortal(
+      context,
+      scope: subscription!.isOrganizationScope ? 'organization' : 'user',
+    );
+    return;
+  }
+
+  taploeToast(
+    context,
+    ownerCanManage
+        ? taploeState.t.text(
+            'Ya tienes un plan de pago activo.',
+            'You already have an active paid plan.',
+          )
+        : taploeState.t.text(
+            'Tu equipo ya tiene un plan activo. Solo el owner puede administrar la suscripción.',
+            'Your team already has an active plan. Only the owner can manage the subscription.',
+          ),
+  );
+}
+
+Future<void> _openStripeUrl(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null) {
+    taploeToast(context, 'Stripe devolvió una URL inválida.', error: true);
+    return;
+  }
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (context.mounted) {
+      taploeToast(context, 'No se pudo abrir Stripe.', error: true);
+    }
+  }
+}
+
+Future<void> _openBillingPortal(
+  BuildContext context, {
+  required String scope,
+}) async {
+  try {
+    final portalUrl = await BillingRepository.createPortalSession(scope: scope);
+    if (context.mounted) await _openStripeUrl(context, portalUrl);
+  } catch (error) {
+    safePrintError(error);
+    if (context.mounted) {
+      taploeToast(
+        context,
+        'No pudimos abrir el portal de facturación.',
+        error: true,
+      );
+    }
+  }
+}
+
+class _StripePlansDialog extends StatefulWidget {
+  const _StripePlansDialog();
+
+  @override
+  State<_StripePlansDialog> createState() => _StripePlansDialogState();
+}
+
+class _StripePlansDialogState extends State<_StripePlansDialog> {
+  String _plan = 'premium';
+  String _billingPeriod = 'monthly';
+  int _businessQuantity = 5;
+  bool _loading = false;
+
+  double get _premiumPrice {
+    final mx = taploeState.localeConfig.market == TaploeMarket.mx;
+    if (mx) return _billingPeriod == 'annual' ? 1759 : 199;
+    return _billingPeriod == 'annual' ? 87.99 : 9.99;
+  }
+
+  double get _businessPrice {
+    final mx = taploeState.localeConfig.market == TaploeMarket.mx;
+    if (mx) return _billingPeriod == 'annual' ? 879 : 99;
+    return _billingPeriod == 'annual' ? 43.99 : 4.99;
+  }
+
+  String _price(double value) {
+    final currency = taploeState.localeConfig.currencyCode;
+    if (currency == 'MXN') return '\$${value.toStringAsFixed(0)} MXN';
+    return '\$${value.toStringAsFixed(2)} USD';
+  }
+
+  Future<void> _startCheckout() async {
+    setState(() => _loading = true);
+    try {
+      final checkoutUrl = await BillingRepository.createCheckoutSession(
+        plan: _plan,
+        billingPeriod: _billingPeriod,
+        quantity: _plan == 'premium' ? 1 : _businessQuantity,
+        language: taploeState.localeConfig.languageCode,
+        market: taploeState.localeConfig.marketCode,
+        locale: taploeState.localeConfig.localeCode,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      await _openStripeUrl(context, checkoutUrl);
+    } catch (error) {
+      safePrintError(error);
+      if (mounted) {
+        taploeToast(
+          context,
+          'No pudimos iniciar Checkout. Si ya tienes una suscripción, adminístrala desde Facturación.',
+          error: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final annual = _billingPeriod == 'annual';
+    final t = taploeState.t;
+    return TaploeModalShell(
+      title: t.choosePlan,
+      subtitle: t.checkoutCurrencyNotice,
+      maxWidth: 880,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _BillingPeriodChip(
+                selected: !annual,
+                label: t.monthly,
+                onTap: () => setState(() => _billingPeriod = 'monthly'),
+              ),
+              _BillingPeriodChip(
+                selected: annual,
+                label: t.annual,
+                onTap: () => setState(() => _billingPeriod = 'annual'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 720;
+              final cards = [
+                _StripePlanCard(
+                  selected: _plan == 'premium',
+                  title: 'Taploe Premium',
+                  price:
+                      '${_price(_premiumPrice)} ${annual ? t.perYear : t.perMonth}',
+                  description: t.premiumDescription,
+                  bullets: [
+                    t.text(
+                      'Hasta 5 perfiles digitales',
+                      'Up to 5 digital profiles',
+                    ),
+                    t.text(
+                      'Diseño avanzado y analíticas',
+                      'Advanced design and analytics',
+                    ),
+                    t.text('Perfil sin marca Taploe', 'Taploe-free profile'),
+                  ],
+                  onTap: () => setState(() => _plan = 'premium'),
+                ),
+                _StripePlanCard(
+                  selected: _plan == 'business',
+                  title: 'Taploe Business',
+                  price:
+                      '${_price(_businessPrice)} ${annual ? t.perProfilePerYear : t.perProfilePerMonth}',
+                  description: t.businessDescription,
+                  bullets: [
+                    t.text('Mínimo 5 perfiles', 'Minimum 5 profiles'),
+                    t.text('Administración de equipo', 'Team administration'),
+                    t.text(
+                      'Identidad visual compartida',
+                      'Shared brand identity',
+                    ),
+                  ],
+                  onTap: () => setState(() => _plan = 'business'),
+                ),
+              ];
+              if (narrow) {
+                return Column(
+                  children: [
+                    for (final card in cards) ...[
+                      card,
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 12),
+                  Expanded(child: cards[1]),
+                ],
+              );
+            },
+          ),
+          if (_plan == 'business') ...[
+            const SizedBox(height: 16),
+            _BusinessQuantitySelector(
+              quantity: _businessQuantity,
+              unitPrice: _businessPrice,
+              annual: annual,
+              onChanged: (value) => setState(() => _businessQuantity = value),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _MutedText(t.stripeTruthNotice),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: TaploeButton(
+                  label: _loading ? t.openingStripe : t.continueToStripe,
+                  icon: Icons.open_in_new_rounded,
+                  loading: _loading,
+                  onPressed: _startCheckout,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillingPeriodChip extends StatelessWidget {
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+
+  const _BillingPeriodChip({
+    required this.selected,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      selected: selected,
+      label: Text(label),
+      onSelected: (_) => onTap(),
+      selectedColor: TaploeColors.blue.withValues(alpha: .12),
+      labelStyle: GoogleFonts.dmSans(
+        color: selected ? TaploeColors.blue : context.text,
+        fontWeight: FontWeight.w800,
+      ),
+      side: BorderSide(
+        color: selected ? TaploeColors.blue : TaploeColors.border,
+      ),
+    );
+  }
+}
+
+class _StripePlanCard extends StatelessWidget {
+  final bool selected;
+  final String title;
+  final String price;
+  final String description;
+  final List<String> bullets;
+  final VoidCallback onTap;
+
+  const _StripePlanCard({
+    required this.selected,
+    required this.title,
+    required this.price,
+    required this.description,
+    required this.bullets,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: selected
+              ? TaploeColors.blue.withValues(alpha: .06)
+              : TaploeColors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected ? TaploeColors.blue : TaploeColors.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: selected ? TaploeColors.blue : context.muted,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      color: context.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              price,
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.blue,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final bullet in bullets)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: TaploeColors.success,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        bullet,
+                        style: GoogleFonts.dmSans(
+                          color: context.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BusinessQuantitySelector extends StatelessWidget {
+  final int quantity;
+  final double unitPrice;
+  final bool annual;
+  final ValueChanged<int> onChanged;
+
+  const _BusinessQuantitySelector({
+    required this.quantity,
+    required this.unitPrice,
+    required this.annual,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final subtotal = unitPrice * quantity;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TaploeColors.page,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.groups_2_outlined, color: TaploeColors.blue),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$quantity perfiles',
+                  style: GoogleFonts.dmSans(
+                    color: context.text,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Subtotal informativo: \$${subtotal.toStringAsFixed(2)} USD ${annual ? 'al año' : 'al mes'}',
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Quitar perfil',
+            onPressed: quantity > 5 ? () => onChanged(quantity - 1) : null,
+            icon: const Icon(Icons.remove_rounded),
+          ),
+          IconButton(
+            tooltip: 'Agregar perfil',
+            onPressed: quantity < 500 ? () => onChanged(quantity + 1) : null,
+            icon: const Icon(Icons.add_rounded),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Future<DigitalProfileModel?> _showCreateProfileDialog(
@@ -22934,6 +23389,7 @@ class _SettingsViewState extends State<SettingsView> {
   final name = TextEditingController();
   final phone = TextEditingController();
   final timezone = TextEditingController();
+  TaploeLocaleConfig selectedLocale = TaploeLocaleConfig.esMx;
   bool saving = false;
 
   @override
@@ -22957,12 +23413,14 @@ class _SettingsViewState extends State<SettingsView> {
     if (user == null) return;
     if (name.text == user.username &&
         phone.text == (user.phone ?? '') &&
-        timezone.text == user.timezone) {
+        timezone.text == user.timezone &&
+        selectedLocale.localeCode == taploeState.localeConfig.localeCode) {
       return;
     }
     name.text = user.username;
     phone.text = user.phone ?? '';
     timezone.text = user.timezone;
+    selectedLocale = taploeState.localeConfig;
   }
 
   Future<void> save() async {
@@ -23036,11 +23494,17 @@ class _SettingsViewState extends State<SettingsView> {
         username: requestedUsername,
         phone: phone.text,
         timezone: timezone.text,
+        preferredLanguage: selectedLocale.languageCode,
+        preferredMarket: selectedLocale.marketCode,
       );
       taploeState.updateCurrentUser(updatedUser);
+      await taploeState.updateLocale(selectedLocale);
 
       if (profile != null && usernameChanged) {
-        final updatedProfile = profile.copyWith(publicSlug: requestedUsername);
+        final updatedProfile = profile.copyWith(
+          publicSlug: requestedUsername,
+          publicLocale: selectedLocale.localeCode,
+        );
         taploeState.updateActiveProfile(updatedProfile);
         await ProfileRepository.updateProfile(updatedProfile);
       }
@@ -23062,14 +23526,18 @@ class _SettingsViewState extends State<SettingsView> {
     final user = taploeState.currentUser;
     final org = taploeState.organization;
     final capabilities = taploeState.capabilities;
+    final t = taploeState.t;
     final billingSubscription =
         taploeState.organizationSubscription ?? taploeState.userSubscription;
     return PageShell(
-      title: 'Configuración',
-      subtitle: 'Cuenta, preferencias, organización, seguridad y plan.',
+      title: t.settings,
+      subtitle: t.text(
+        'Cuenta, preferencias, organización, seguridad y plan.',
+        'Account, preferences, organization, security, and plan.',
+      ),
       actions: [
         TaploeButton(
-          label: 'Guardar',
+          label: t.save,
           width: 122,
           loading: saving,
           onPressed: save,
@@ -23091,12 +23559,12 @@ class _SettingsViewState extends State<SettingsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PanelHeader(
-                          title: 'Cuenta',
+                          title: t.text('Cuenta', 'Account'),
                           icon: Icons.person_outline_rounded,
                         ),
                         const SizedBox(height: 14),
                         TaploeTextField(
-                          label: 'Nombre de usuario',
+                          label: t.text('Nombre de usuario', 'Username'),
                           controller: name,
                           keyboardType: TextInputType.url,
                           inputFormatters: [
@@ -23114,15 +23582,50 @@ class _SettingsViewState extends State<SettingsView> {
                         ),
                         const SizedBox(height: 12),
                         TaploeTextField(
-                          label: 'Teléfono',
+                          label: t.text('Teléfono', 'Phone'),
                           controller: phone,
                           onSubmitted: (_) => save(),
                         ),
                         const SizedBox(height: 12),
                         TaploeTextField(
-                          label: 'Zona horaria',
+                          label: t.text('Zona horaria', 'Time zone'),
                           controller: timezone,
                           onSubmitted: (_) => save(),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          t.localeAndMarket,
+                          style: GoogleFonts.dmSans(
+                            color: context.text,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<TaploeLocaleConfig>(
+                          initialValue: selectedLocale,
+                          decoration: InputDecoration(
+                            labelText: t.marketAndCurrency,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                color: TaploeColors.border,
+                              ),
+                            ),
+                          ),
+                          items: [
+                            DropdownMenuItem(
+                              value: TaploeLocaleConfig.esMx,
+                              child: Text(t.spanishMexico),
+                            ),
+                            DropdownMenuItem(
+                              value: TaploeLocaleConfig.enUs,
+                              child: Text(t.englishUs),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => selectedLocale = value);
+                          },
                         ),
                       ],
                     ),
@@ -23133,17 +23636,20 @@ class _SettingsViewState extends State<SettingsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PanelHeader(
-                          title: 'Seguridad',
+                          title: t.text('Seguridad', 'Security'),
                           icon: Icons.lock_outline_rounded,
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Tu sesión usa autenticación OTP por correo. Puedes cerrarla desde aquí.',
+                          t.text(
+                            'Tu sesión usa autenticación OTP por correo. Puedes cerrarla desde aquí.',
+                            'Your session uses email OTP authentication. You can sign out here.',
+                          ),
                           style: GoogleFonts.dmSans(color: context.muted),
                         ),
                         const SizedBox(height: 14),
                         TaploeButton(
-                          label: 'Cerrar sesión',
+                          label: t.text('Cerrar sesión', 'Sign out'),
                           icon: Icons.logout_rounded,
                           kind: TaploeButtonKind.secondary,
                           onPressed: taploeState.signOut,
@@ -23168,17 +23674,23 @@ class _SettingsViewState extends State<SettingsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PanelHeader(
-                          title: 'Preferencias',
+                          title: t.text('Preferencias', 'Preferences'),
                           icon: Icons.tune_rounded,
                         ),
                         const SizedBox(height: 12),
                         _CheckRow(
-                          label: 'Perfil predeterminado configurado',
+                          label: t.text(
+                            'Perfil predeterminado configurado',
+                            'Default profile configured',
+                          ),
                           done: taploeState.activeProfile != null,
                         ),
                         const SizedBox(height: 8),
-                        const _MutedText(
-                          'Las preferencias de notificaciones se conectarán cuando exista una tabla de preferencias o integración de email/webhook.',
+                        _MutedText(
+                          t.text(
+                            'Las preferencias de notificaciones se conectarán cuando exista una tabla de preferencias o integración de email/webhook.',
+                            'Notification preferences will be connected when a preferences table or email/webhook integration exists.',
+                          ),
                         ),
                       ],
                     ),
@@ -23189,16 +23701,22 @@ class _SettingsViewState extends State<SettingsView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PanelHeader(
-                          title: 'Organización',
+                          title: t.text('Organización', 'Organization'),
                           icon: Icons.business_outlined,
                         ),
                         const SizedBox(height: 12),
                         if (org == null)
-                          const _MutedText(
-                            'Esta cuenta todavía no pertenece a una organización.',
+                          _MutedText(
+                            t.text(
+                              'Esta cuenta todavía no pertenece a una organización.',
+                              'This account does not belong to an organization yet.',
+                            ),
                           )
                         else ...[
-                          _InfoLine(label: 'Nombre', value: org.name),
+                          _InfoLine(
+                            label: t.text('Nombre', 'Name'),
+                            value: org.name,
+                          ),
                         ],
                       ],
                     ),
@@ -23234,12 +23752,13 @@ class _BillingSettingsPanel extends StatelessWidget {
         sub == null || sub.ownerUserId.isEmpty || sub.ownerUserId == user.id;
     final status = _billingStatusLabel(sub);
     final statusColor = _billingStatusColor(sub);
+    final t = taploeState.t;
     return TaploePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _PanelHeader(
-            title: 'Facturación',
+            title: t.billing,
             icon: Icons.receipt_long_outlined,
             trailing: capabilities.label,
           ),
@@ -23254,37 +23773,45 @@ class _BillingSettingsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _InfoLine(label: 'Plan efectivo', value: capabilities.label),
+          _InfoLine(label: t.currentPlan, value: capabilities.label),
           _InfoLine(
-            label: 'Tipo de plan',
-            value: isOrgBilling ? 'Empresa / equipo' : 'Individual',
+            label: t.text('Tipo de plan', 'Plan type'),
+            value: isOrgBilling
+                ? t.text('Empresa / equipo', 'Business / team')
+                : t.text('Individual', 'Individual'),
           ),
           _InfoLine(
-            label: 'Responsable',
+            label: t.text('Responsable', 'Owner'),
             value: isOrgBilling
-                ? organization?.name ?? 'Organización'
+                ? organization?.name ?? t.text('Organización', 'Organization')
                 : user.username,
           ),
           _InfoLine(
-            label: 'Ciclo',
+            label: t.text('Ciclo', 'Cycle'),
             value: _billingIntervalLabel(sub?.billingInterval),
           ),
-          _InfoLine(label: 'Prueba termina', value: _dateLabel(sub?.trialEnd)),
+          _InfoLine(
+            label: t.text('Prueba termina', 'Trial ends'),
+            value: _dateLabel(sub?.trialEnd),
+          ),
           _InfoLine(
             label: sub?.cancelAtPeriodEnd == true
-                ? 'Acceso hasta'
-                : 'Próximo pago',
+                ? t.text('Acceso hasta', 'Access until')
+                : t.text('Próximo pago', 'Next payment'),
             value: _dateLabel(sub?.nextChargeAt),
           ),
           _InfoLine(
-            label: 'Renovación automática',
+            label: t.text('Renovación automática', 'Auto-renewal'),
             value: sub == null
-                ? 'Sin suscripción'
+                ? t.text('Sin suscripción', 'No subscription')
                 : sub.cancelAtPeriodEnd
-                ? 'Cancelada al final del periodo'
+                ? t.text(
+                    'Cancelada al final del periodo',
+                    'Canceled at period end',
+                  )
                 : sub.grantsAccess
-                ? 'Activa'
-                : 'Inactiva',
+                ? t.text('Activa', 'Active')
+                : t.text('Inactiva', 'Inactive'),
           ),
           if (sub?.isPastDue == true) ...[
             const SizedBox(height: 8),
@@ -23307,34 +23834,34 @@ class _BillingSettingsPanel extends StatelessWidget {
             children: [
               TaploeButton(
                 width: 170,
-                label: 'Cambiar plan',
+                label: t.changePlan,
                 icon: Icons.workspace_premium_outlined,
                 kind: TaploeButtonKind.secondary,
                 onPressed: () => _showPlansDialog(context),
               ),
               TaploeButton(
                 width: 210,
-                label: 'Método de pago',
+                label: t.manageSubscription,
                 icon: Icons.credit_card_outlined,
                 kind: TaploeButtonKind.secondary,
                 onPressed: hasStripe && ownerCanManage
-                    ? () => taploeToast(
+                    ? () => _openBillingPortal(
                         context,
-                        'Conecta el portal de Stripe para administrar métodos de pago.',
+                        scope: isOrgBilling ? 'organization' : 'user',
                       )
                     : null,
               ),
               TaploeButton(
                 width: 190,
-                label: sub?.cancelAtPeriodEnd == true ? 'Reanudar' : 'Cancelar',
+                label: sub?.cancelAtPeriodEnd == true ? t.resume : t.cancel,
                 icon: sub?.cancelAtPeriodEnd == true
                     ? Icons.restart_alt_rounded
                     : Icons.cancel_outlined,
                 kind: TaploeButtonKind.secondary,
                 onPressed: hasStripe && ownerCanManage
-                    ? () => taploeToast(
+                    ? () => _openBillingPortal(
                         context,
-                        'Conecta Stripe para cancelar o reanudar desde el portal de facturación.',
+                        scope: isOrgBilling ? 'organization' : 'user',
                       )
                     : null,
               ),
@@ -23353,13 +23880,10 @@ class _BillingSettingsPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 18),
-          const _PanelHeader(
-            title: 'Historial de pagos',
-            icon: Icons.payments_outlined,
-          ),
+          _PanelHeader(title: t.paymentHistory, icon: Icons.payments_outlined),
           const SizedBox(height: 12),
           if (invoices.isEmpty)
-            const _MutedText('Aún no hay pagos o facturas registradas.')
+            _MutedText(t.noInvoices)
           else
             for (final invoice in invoices.take(6))
               _BillingInvoiceRow(invoice: invoice),
@@ -23526,18 +24050,21 @@ class _BillingInvoiceRow extends StatelessWidget {
 }
 
 String _billingStatusLabel(BillingSubscriptionModel? subscription) {
-  if (subscription == null) return 'Sin suscripción registrada';
+  final t = taploeState.t;
+  if (subscription == null) {
+    return t.text('Sin suscripción registrada', 'No subscription recorded');
+  }
   if (subscription.cancelAtPeriodEnd && subscription.grantsAccess) {
-    return 'Cancelación programada';
+    return t.text('Cancelación programada', 'Cancellation scheduled');
   }
   return switch (subscription.status) {
-    'trialing' => 'Prueba gratis activa',
-    'active' => 'Suscripción activa',
-    'past_due' => 'Pago pendiente',
-    'grace_period' => 'Periodo de gracia',
-    'canceled' => 'Cancelada',
-    'expired' => 'Vencida',
-    'unpaid' => 'Impago',
+    'trialing' => t.text('Prueba gratis activa', 'Free trial active'),
+    'active' => t.text('Suscripción activa', 'Subscription active'),
+    'past_due' => t.text('Pago pendiente', 'Payment pending'),
+    'grace_period' => t.text('Periodo de gracia', 'Grace period'),
+    'canceled' => t.text('Cancelada', 'Canceled'),
+    'expired' => t.text('Vencida', 'Expired'),
+    'unpaid' => t.text('Impago', 'Unpaid'),
     _ => subscription.status,
   };
 }
@@ -23556,25 +24083,41 @@ String _billingStatusMessage({
   required TaploePlanCapabilities capabilities,
   required OrganizationModel? organization,
 }) {
+  final t = taploeState.t;
   if (subscription == null) {
-    return 'Tu plan efectivo es ${capabilities.label}. Si esperabas Premium o Empresa, falta crear o sincronizar la suscripción.';
+    return t.text(
+      'Tu plan efectivo es ${capabilities.label}. Si esperabas Premium o Empresa, falta crear o sincronizar la suscripción.',
+      'Your effective plan is ${capabilities.label}. If you expected Premium or Business, the subscription still needs to be created or synced.',
+    );
   }
   if (subscription.grantsAccess && subscription.isOrganizationScope) {
-    return 'La organización ${organization?.name ?? ''} otorga beneficios ${capabilities.label} mientras la suscripción esté vigente.';
+    return t.text(
+      'La organización ${organization?.name ?? ''} otorga beneficios ${capabilities.label} mientras la suscripción esté vigente.',
+      'The organization ${organization?.name ?? ''} grants ${capabilities.label} benefits while the subscription is active.',
+    );
   }
   if (subscription.grantsAccess) {
-    return 'Tu cuenta tiene beneficios ${capabilities.label} mientras la suscripción esté vigente.';
+    return t.text(
+      'Tu cuenta tiene beneficios ${capabilities.label} mientras la suscripción esté vigente.',
+      'Your account has ${capabilities.label} benefits while the subscription is active.',
+    );
   }
   if (subscription.isOrganizationScope) {
-    return 'La organización conserva miembros e historial, pero no otorga beneficios de pago hasta renovar.';
+    return t.text(
+      'La organización conserva miembros e historial, pero no otorga beneficios de pago hasta renovar.',
+      'The organization keeps members and history, but paid benefits stay off until renewal.',
+    );
   }
-  return 'La cuenta vuelve a Gratis hasta que se reactive una suscripción vigente.';
+  return t.text(
+    'La cuenta vuelve a Gratis hasta que se reactive una suscripción vigente.',
+    'The account returns to Free until an active subscription is restored.',
+  );
 }
 
 String _billingIntervalLabel(String? interval) => switch (interval) {
-  'annual' => 'Anual',
-  'monthly' => 'Mensual',
-  null || '' => 'No definido',
+  'annual' => taploeState.t.annual,
+  'monthly' => taploeState.t.monthly,
+  null || '' => taploeState.t.text('No definido', 'Not set'),
   _ => interval,
 };
 

@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
+import '../localization.dart';
 import '../plan_capabilities.dart';
 import '../profile_public_card.dart';
 import '../repositories.dart';
+import '../state.dart';
 import '../theme.dart';
 import '../utils.dart';
 import '../widgets.dart';
@@ -136,12 +138,19 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       eventType: 'contact_save',
       channel: channel ?? 'direct',
     );
-    if (mounted) taploeToast(context, 'Contacto copiado en formato vCard.');
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(p.publicLocale),
+    );
+    if (mounted) taploeToast(context, t.vcardCopied);
   }
 
   Future<void> _shareProfile() async {
     await Clipboard.setData(ClipboardData(text: Uri.base.toString()));
-    if (mounted) taploeToast(context, 'Enlace copiado.');
+    final p = profile;
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(p?.publicLocale),
+    );
+    if (mounted) taploeToast(context, t.linkCopied);
   }
 
   @override
@@ -151,11 +160,12 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     }
     final p = profile;
     if (p == null) {
-      return const Scaffold(
+      final t = taploeState.t;
+      return Scaffold(
         body: Center(
           child: TaploeEmpty(
-            title: 'Perfil no disponible',
-            message: 'El perfil no existe o fue desactivado.',
+            title: t.profileUnavailable,
+            message: t.profileUnavailableMessage,
           ),
         ),
       );

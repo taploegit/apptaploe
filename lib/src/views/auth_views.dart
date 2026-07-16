@@ -53,6 +53,7 @@ class _AuthPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = taploeState.t;
     return TaploePanel(
       padding: EdgeInsets.symmetric(
         horizontal: context.isMobile ? 22 : 42,
@@ -67,7 +68,10 @@ class _AuthPanel extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 20),
           Text(
-            '¿Recibiste una tarjeta Taploe?',
+            t.text(
+              '¿Recibiste una tarjeta Taploe?',
+              'Did you receive a Taploe card?',
+            ),
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 14,
@@ -77,7 +81,10 @@ class _AuthPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Inicia sesión y vincúlala a tu perfil digital.',
+            t.text(
+              'Inicia sesión y vincúlala a tu perfil digital.',
+              'Sign in and link it to your digital profile.',
+            ),
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontSize: 13, color: TaploeColors.muted),
           ),
@@ -120,7 +127,12 @@ class _LoginViewState extends State<LoginView> {
   Future<void> send() async {
     final normalized = email.text.trim().toLowerCase();
     if (!_validEmail(normalized)) {
-      setState(() => error = 'Ingresa un correo electrónico válido.');
+      setState(
+        () => error = taploeState.t.text(
+          'Ingresa un correo electrónico válido.',
+          'Enter a valid email address.',
+        ),
+      );
       return;
     }
 
@@ -146,7 +158,12 @@ class _LoginViewState extends State<LoginView> {
       setState(() => error = _friendlyAuthError(e.message));
     } catch (_) {
       if (!mounted) return;
-      setState(() => error = 'No se pudo enviar el código. Intenta de nuevo.');
+      setState(
+        () => error = taploeState.t.text(
+          'No se pudo enviar el código. Intenta de nuevo.',
+          'We could not send the code. Try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -182,6 +199,7 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    final t = taploeState.t;
     return AuthLayout(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -189,7 +207,10 @@ class _LoginViewState extends State<LoginView> {
           const TaploeLogo(size: 48, centered: true),
           const SizedBox(height: 62),
           Text(
-            'Inicia sesión o crea tu cuenta en segundos',
+            t.text(
+              'Inicia sesión o crea tu cuenta en segundos',
+              'Sign in or create your account in seconds',
+            ),
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: context.isMobile ? 36 : 48,
@@ -201,7 +222,10 @@ class _LoginViewState extends State<LoginView> {
           ),
           const SizedBox(height: 18),
           Text(
-            'Usa tu correo o continúa con otro servicio. Revisaremos si ya tienes cuenta o te ayudaremos a crear una.',
+            t.text(
+              'Usa tu correo o continúa con otro servicio. Revisaremos si ya tienes cuenta o te ayudaremos a crear una.',
+              'Use your email or continue with another service. We will check whether you already have an account or help you create one.',
+            ),
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: TaploeColors.muted,
@@ -211,7 +235,7 @@ class _LoginViewState extends State<LoginView> {
           ),
           const SizedBox(height: 36),
           TaploeTextField(
-            label: 'Correo electrónico',
+            label: t.text('Correo electrónico', 'Email address'),
             hint: 'Email',
             controller: email,
             keyboardType: TextInputType.emailAddress,
@@ -226,7 +250,7 @@ class _LoginViewState extends State<LoginView> {
           ),
           const SizedBox(height: 20),
           TaploeButton(
-            label: 'Continuar',
+            label: t.text('Continuar', 'Continue'),
             icon: Icons.arrow_forward_rounded,
             loading: loading,
             expanded: true,
@@ -236,7 +260,7 @@ class _LoginViewState extends State<LoginView> {
           const _AuthDivider(label: 'o'),
           const SizedBox(height: 22),
           _OAuthButton(
-            label: 'Continuar con Google',
+            label: t.text('Continuar con Google', 'Continue with Google'),
             icon: SvgPicture.asset(
               'assets/images/icons/google-icon.svg',
               width: 22,
@@ -251,7 +275,10 @@ class _LoginViewState extends State<LoginView> {
           SizedBox(
             width: double.infinity,
             child: Text(
-              'Al continuar aceptas recibir un código temporal de acceso.',
+              t.text(
+                'Al continuar aceptas recibir un código temporal de acceso.',
+                'By continuing, you agree to receive a temporary access code.',
+              ),
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(
                 fontSize: 12,
@@ -398,7 +425,12 @@ class _OtpViewState extends State<OtpView> {
 
     final token = code.text.trim();
     if (token.length != 6 && token.length != 8) {
-      setState(() => error = 'Ingresa el código completo.');
+      setState(
+        () => error = taploeState.t.text(
+          'Ingresa el código completo.',
+          'Enter the full code.',
+        ),
+      );
       return;
     }
 
@@ -463,12 +495,22 @@ class _OtpViewState extends State<OtpView> {
       await AuthRepository.sendOtp(widget.email);
       code.clear();
       _startCountdown();
-      if (mounted) taploeToast(context, 'Código reenviado.');
+      if (mounted) {
+        taploeToast(
+          context,
+          taploeState.t.text('Código reenviado.', 'Code resent.'),
+        );
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = _friendlyAuthError(e.message));
     } catch (_) {
       if (mounted) {
-        setState(() => error = 'No se pudo reenviar el código.');
+        setState(
+          () => error = taploeState.t.text(
+            'No se pudo reenviar el código.',
+            'We could not resend the code.',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => resending = false);
@@ -485,12 +527,13 @@ class _OtpViewState extends State<OtpView> {
 
   @override
   Widget build(BuildContext context) {
+    final t = taploeState.t;
     return AuthLayout(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Revisa tu correo',
+            t.text('Revisa tu correo', 'Check your email'),
             style: GoogleFonts.outfit(
               fontSize: 36,
               fontWeight: FontWeight.w600,
@@ -500,7 +543,10 @@ class _OtpViewState extends State<OtpView> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Ingresa el código enviado a $maskedEmail.',
+            t.text(
+              'Ingresa el código enviado a $maskedEmail.',
+              'Enter the code sent to $maskedEmail.',
+            ),
             style: GoogleFonts.dmSans(
               color: TaploeColors.muted,
               fontSize: 15,
@@ -538,7 +584,7 @@ class _OtpViewState extends State<OtpView> {
           ),
           const SizedBox(height: 20),
           TaploeButton(
-            label: 'Verificar código',
+            label: t.text('Verificar código', 'Verify code'),
             icon: Icons.check_circle_outline_rounded,
             loading: loading,
             expanded: true,
@@ -548,7 +594,10 @@ class _OtpViewState extends State<OtpView> {
           Center(
             child: seconds > 0
                 ? Text(
-                    'Puedes reenviar el código en ${seconds}s',
+                    t.text(
+                      'Puedes reenviar el código en ${seconds}s',
+                      'You can resend the code in ${seconds}s',
+                    ),
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       color: TaploeColors.muted,
@@ -562,7 +611,7 @@ class _OtpViewState extends State<OtpView> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Reenviar código'),
+                    label: Text(t.text('Reenviar código', 'Resend code')),
                   ),
           ),
           const SizedBox(height: 8),
@@ -572,7 +621,7 @@ class _OtpViewState extends State<OtpView> {
               if (!context.mounted) return;
               context.go('/login');
             },
-            child: const Text('Usar otro correo'),
+            child: Text(t.text('Usar otro correo', 'Use another email')),
           ),
         ],
       ),
@@ -596,14 +645,15 @@ class AuthLoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AuthLayout(
+    final t = taploeState.t;
+    return AuthLayout(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TaploeLogo(size: 48, centered: true),
-          SizedBox(height: 64),
+          const TaploeLogo(size: 48, centered: true),
+          const SizedBox(height: 64),
           Text(
-            'Preparando tu perfil',
+            t.text('Preparando tu perfil', 'Preparing your profile'),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TaploeColors.black,
@@ -612,8 +662,8 @@ class AuthLoadingView extends StatelessWidget {
               height: 1.1,
             ),
           ),
-          SizedBox(height: 42),
-          _AuthLoadingDots(),
+          const SizedBox(height: 42),
+          const _AuthLoadingDots(),
         ],
       ),
     );

@@ -283,12 +283,28 @@ class UserRepository {
     return AppUserModel.fromJson(Map<String, dynamic>.from(existing));
   }
 
-  static Future<AppUserModel?> currentAppUser() async {
+  static Future<AppUserModel?> currentAppUser({
+    String? preferredLanguage,
+    String? preferredMarket,
+    bool persistLocaleOverride = false,
+  }) async {
     final auth = await verifiedAuthUser();
     if (auth == null) return null;
 
     final existing = await _fetchByAuthUserId(auth.id);
-    if (existing != null) return existing;
+    if (existing != null) {
+      if (persistLocaleOverride &&
+          preferredLanguage != null &&
+          preferredMarket != null &&
+          (existing.preferredLanguage != preferredLanguage ||
+              existing.preferredMarket != preferredMarket)) {
+        return updateLocalePreference(
+          preferredLanguage: preferredLanguage,
+          preferredMarket: preferredMarket,
+        );
+      }
+      return existing;
+    }
 
     final email = auth.email ?? '';
     final name =
@@ -306,8 +322,11 @@ class UserRepository {
         'email': email,
         'status': 'active',
         'plan_type': 'free',
-        'preferred_language': 'es',
-        'timezone': 'America/Tijuana',
+        'preferred_language': preferredLanguage ?? 'es',
+        'preferred_market': preferredMarket ?? 'mx',
+        'timezone': preferredMarket == 'us'
+            ? 'America/Los_Angeles'
+            : 'America/Tijuana',
       });
     } on PostgrestException catch (error) {
       if (!_isDuplicateAuthUser(error)) rethrow;
@@ -329,6 +348,8 @@ class UserRepository {
   static Future<AppUserModel> upsertCurrentUser({
     String? username,
     required String email,
+    String? preferredLanguage,
+    String? preferredMarket,
   }) async {
     final auth = await verifiedAuthUser();
     if (auth == null) throw Exception('No hay sesión activa.');
@@ -345,15 +366,20 @@ class UserRepository {
         throw ArgumentError('username_taken');
       }
 
-      await _db
-          .from('app_users')
-          .update({
-            'username': requestedUsername ?? existing.username,
-            'email': email.trim().toLowerCase(),
-            'last_login_at': nowIso(),
-            'updated_at': nowIso(),
-          })
-          .eq('auth_user_id', auth.id);
+      final updates = <String, dynamic>{
+        'username': requestedUsername ?? existing.username,
+        'email': email.trim().toLowerCase(),
+        'last_login_at': nowIso(),
+        'updated_at': nowIso(),
+      };
+      if (preferredLanguage != null) {
+        updates['preferred_language'] = preferredLanguage;
+      }
+      if (preferredMarket != null) {
+        updates['preferred_market'] = preferredMarket;
+      }
+
+      await _db.from('app_users').update(updates).eq('auth_user_id', auth.id);
 
       return (await _fetchByAuthUserId(auth.id))!;
     }
@@ -369,8 +395,11 @@ class UserRepository {
         'email': email.trim().toLowerCase(),
         'status': 'active',
         'plan_type': 'free',
-        'preferred_language': 'es',
-        'timezone': 'America/Tijuana',
+        'preferred_language': preferredLanguage ?? 'es',
+        'preferred_market': preferredMarket ?? 'mx',
+        'timezone': preferredMarket == 'us'
+            ? 'America/Los_Angeles'
+            : 'America/Tijuana',
         'last_login_at': nowIso(),
       });
     } on PostgrestException catch (error) {
@@ -417,6 +446,8 @@ class UserRepository {
     required String username,
     String? phone,
     String? timezone,
+    String? preferredLanguage,
+    String? preferredMarket,
   }) async {
     final current = await verifiedAuthUser();
     if (current == null) throw Exception('No hay sesión activa.');
@@ -431,19 +462,50 @@ class UserRepository {
       throw ArgumentError('username_taken');
     }
 
+    final updates = <String, dynamic>{
+      'username': cleanUsername,
+      'phone': phone?.trim(),
+      'updated_at': nowIso(),
+    };
+    if (timezone != null && timezone.trim().isNotEmpty) {
+      updates['timezone'] = timezone.trim();
+    }
+    if (preferredLanguage != null) {
+      updates['preferred_language'] = preferredLanguage;
+    }
+    if (preferredMarket != null) {
+      updates['preferred_market'] = preferredMarket;
+    }
+
+    await _db.from('app_users').update(updates).eq('auth_user_id', current.id);
+
+    final user = await _fetchByAuthUserId(current.id);
+    if (user == null) throw Exception('No se pudo cargar el usuario.');
+    if (preferredLanguage != null && preferredMarket != null) {
+      await ProfileRepository.syncOwnerPublicLocale(user);
+    }
+    return user;
+  }
+
+  static Future<AppUserModel> updateLocalePreference({
+    required String preferredLanguage,
+    required String preferredMarket,
+  }) async {
+    final current = await verifiedAuthUser();
+    if (current == null) throw Exception('No hay sesión activa.');
+
     await _db
         .from('app_users')
         .update({
-          'username': cleanUsername,
-          'phone': phone?.trim(),
-          if (timezone != null && timezone.trim().isNotEmpty)
-            'timezone': timezone.trim(),
+          'preferred_language': preferredLanguage,
+          'preferred_market': preferredMarket,
           'updated_at': nowIso(),
         })
         .eq('auth_user_id', current.id);
 
     final user = await _fetchByAuthUserId(current.id);
     if (user == null) throw Exception('No se pudo cargar el usuario.');
+    await ProfileRepository.syncOwnerPublicLocale(user);
     return user;
   }
 
@@ -493,6 +555,7 @@ class UserRepository {
               : 'Taploe User',
           'profile_name': 'Perfil principal',
           'public_slug': slug,
+          'public_locale': user.localeConfig.localeCode,
           'status': 'active',
           'visibility': 'public',
           'is_default': true,
@@ -507,6 +570,7 @@ class UserRepository {
       displayName: user.username.isNotEmpty ? user.username : 'Taploe User',
       profileName: 'Perfil principal',
       publicSlug: slug,
+      publicLocale: user.localeConfig.localeCode,
       status: 'active',
       isDefault: true,
     );
@@ -522,8 +586,10 @@ class BillingRepository {
     id,scope,user_id,org_id,owner_user_id,plan_type,billing_interval,status,
     cancel_at_period_end,trial_start,trial_end,current_period_start,
     current_period_end,grace_until,canceled_at,ended_at,stripe_customer_id,
-    stripe_subscription_id,stripe_price_id,stripe_product_id,last_payment_at,
-    next_payment_at,metadata,created_at
+    stripe_subscription_id,stripe_price_id,stripe_product_id,quantity,currency,
+    last_payment_at,next_payment_at,latest_invoice_id,latest_invoice_status,
+    hosted_invoice_url,payment_issue,payment_action_required,
+    trial_ending_notified_at,metadata,created_at
   ''';
 
   static const _invoiceSelect = '''
@@ -611,6 +677,44 @@ class BillingRepository {
       safePrintError(error);
       return const [];
     }
+  }
+
+  static Future<String> createCheckoutSession({
+    required String plan,
+    required String billingPeriod,
+    required int quantity,
+    String language = 'es',
+    String market = 'mx',
+    String locale = 'es-MX',
+  }) async {
+    final response = await _db.functions.invoke(
+      'create-checkout-session',
+      body: {
+        'plan': plan,
+        'billingPeriod': billingPeriod,
+        'quantity': quantity,
+        'language': language == 'en' ? 'en' : 'es',
+        'market': market == 'us' ? 'us' : 'mx',
+        'locale': locale,
+      },
+    );
+    final data = response.data;
+    if (data is Map && data['checkoutUrl'] is String) {
+      return data['checkoutUrl'] as String;
+    }
+    throw StateError('checkout_url_missing');
+  }
+
+  static Future<String> createPortalSession({String scope = 'user'}) async {
+    final response = await _db.functions.invoke(
+      'create-portal-session',
+      body: {'scope': scope == 'organization' ? 'organization' : 'user'},
+    );
+    final data = response.data;
+    if (data is Map && data['portalUrl'] is String) {
+      return data['portalUrl'] as String;
+    }
+    throw StateError('portal_url_missing');
   }
 }
 
@@ -980,6 +1084,16 @@ class ProfileRepository {
     }
   }
 
+  static Future<void> syncOwnerPublicLocale(AppUserModel user) async {
+    await _db
+        .from('digital_profiles')
+        .update({
+          'public_locale': user.localeConfig.localeCode,
+          'updated_at': nowIso(),
+        })
+        .eq('owner_user_id', user.id);
+  }
+
   static Future<List<DigitalProfileModel>> fetchProfilesForUser(
     String userId,
   ) async {
@@ -1157,6 +1271,7 @@ class ProfileRepository {
           'display_name': name,
           'profile_name': count == 1 ? 'Perfil principal' : 'Perfil $count',
           'public_slug': slug,
+          'public_locale': user.localeConfig.localeCode,
           'status': 'active',
           'visibility': 'public',
           'is_default': count == 1,

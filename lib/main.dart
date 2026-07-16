@@ -20,6 +20,7 @@ Future<void> main() async {
       );
 
       usePathUrlStrategy();
+      await taploeState.bootstrapLocaleFromUrl();
 
       taploeState.startAuthListener();
       runApp(const TaploeApp());

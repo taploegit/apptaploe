@@ -91,6 +91,21 @@ final taploeRouter = GoRouter(
           const DashboardView(initialSection: DashboardSection.settings),
     ),
     GoRoute(
+      path: '/settings/billing',
+      builder: (context, state) =>
+          const DashboardView(initialSection: DashboardSection.settings),
+    ),
+    GoRoute(
+      path: '/subscription/success',
+      builder: (context, state) =>
+          const DashboardView(initialSection: DashboardSection.settings),
+    ),
+    GoRoute(
+      path: '/plans',
+      builder: (context, state) =>
+          const DashboardView(initialSection: DashboardSection.settings),
+    ),
+    GoRoute(
       path: '/login',
       builder: (context, state) {
         final token = state.uri.queryParameters['token'];

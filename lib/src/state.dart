@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'localization.dart';
 import 'models.dart';
 import 'plan_capabilities.dart';
 import 'repositories.dart';
@@ -19,10 +21,12 @@ class TaploeState extends ChangeNotifier {
   List<DigitalProfileModel> profiles = [];
   List<PhysicalCardModel> cards = [];
   DigitalProfileModel? activeProfile;
+  TaploeLocaleConfig localeConfig = TaploeLocaleConfig.esMx;
   String? pendingActivationToken;
   bool bootstrapping = true;
   StreamSubscription<AuthState>? _authSubscription;
   Future<void>? _bootstrapFuture;
+  bool _hasEntryLocaleOverride = false;
 
   bool get signedIn => client.auth.currentUser != null && currentUser != null;
   bool get hasLinkedCard => cards.any(_isLinkedCard);
@@ -33,6 +37,24 @@ class TaploeState extends ChangeNotifier {
     userSubscription: userSubscription,
     organizationSubscription: organizationSubscription,
   );
+  TaploeTextCatalog get t => TaploeTextCatalog(localeConfig);
+
+  Future<void> bootstrapLocaleFromUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawLocale = Uri.base.queryParameters['locale'];
+    if (rawLocale != null && rawLocale.trim().isNotEmpty) {
+      localeConfig = TaploeLocaleConfig.fromLocaleParam(rawLocale);
+      _hasEntryLocaleOverride = true;
+      await prefs.setString('taploe.locale', localeConfig.localeCode);
+      notifyListeners();
+      return;
+    }
+
+    final stored = prefs.getString('taploe.locale');
+    localeConfig = TaploeLocaleConfig.fromLocaleParam(stored);
+    _hasEntryLocaleOverride = false;
+    notifyListeners();
+  }
 
   void startAuthListener() {
     _authSubscription ??= client.auth.onAuthStateChange.listen((data) {
@@ -93,11 +115,18 @@ class TaploeState extends ChangeNotifier {
         return;
       }
 
-      currentUser = await UserRepository.currentAppUser();
+      currentUser = await UserRepository.currentAppUser(
+        preferredLanguage: localeConfig.languageCode,
+        preferredMarket: localeConfig.marketCode,
+        persistLocaleOverride: _hasEntryLocaleOverride,
+      );
 
       if (currentUser == null) {
         _clearSessionState();
         return;
+      }
+      if (!_hasEntryLocaleOverride) {
+        localeConfig = currentUser!.localeConfig;
       }
 
       organization = await UserRepository.firstOrganizationForUser(
@@ -197,7 +226,11 @@ class TaploeState extends ChangeNotifier {
   Future<void> refreshAll() async {
     if (currentUser == null) return;
 
-    currentUser = await UserRepository.currentAppUser();
+    currentUser = await UserRepository.currentAppUser(
+      preferredLanguage: localeConfig.languageCode,
+      preferredMarket: localeConfig.marketCode,
+      persistLocaleOverride: _hasEntryLocaleOverride,
+    );
     if (currentUser == null) {
       _clearSessionState();
       notifyListeners();
@@ -232,6 +265,24 @@ class TaploeState extends ChangeNotifier {
 
     _clearSessionState();
 
+    notifyListeners();
+  }
+
+  Future<void> updateLocale(TaploeLocaleConfig next) async {
+    localeConfig = next;
+    _hasEntryLocaleOverride = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('taploe.locale', next.localeCode);
+
+    final user = currentUser;
+    if (user != null) {
+      currentUser = await UserRepository.updateLocalePreference(
+        preferredLanguage: next.languageCode,
+        preferredMarket: next.marketCode,
+      );
+      profiles = await _fetchEditableProfiles();
+      _selectActiveProfileFallback();
+    }
     notifyListeners();
   }
 

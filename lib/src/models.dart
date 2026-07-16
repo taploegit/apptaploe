@@ -1,4 +1,5 @@
 import 'config.dart';
+import 'localization.dart';
 
 DateTime? _dt(dynamic v) =>
     v == null ? null : DateTime.tryParse(v.toString())?.toLocal();
@@ -15,6 +16,8 @@ class AppUserModel {
   final String status;
   final String timezone;
   final String planType;
+  final String preferredLanguage;
+  final String preferredMarket;
 
   const AppUserModel({
     required this.id,
@@ -26,6 +29,8 @@ class AppUserModel {
     this.status = 'active',
     this.timezone = 'America/Tijuana',
     this.planType = 'free',
+    this.preferredLanguage = 'es',
+    this.preferredMarket = 'mx',
   });
 
   factory AppUserModel.fromJson(Map<String, dynamic> json) => AppUserModel(
@@ -38,6 +43,13 @@ class AppUserModel {
     status: json['status'] as String? ?? 'active',
     timezone: json['timezone'] as String? ?? 'America/Tijuana',
     planType: json['plan_type'] as String? ?? 'free',
+    preferredLanguage: json['preferred_language'] as String? ?? 'es',
+    preferredMarket: json['preferred_market'] as String? ?? 'mx',
+  );
+
+  TaploeLocaleConfig get localeConfig => TaploeLocaleConfig.fromParts(
+    language: preferredLanguage,
+    market: preferredMarket,
   );
 
   Map<String, dynamic> toUpsert() => {
@@ -49,6 +61,8 @@ class AppUserModel {
     'status': status,
     'timezone': timezone,
     'plan_type': planType,
+    'preferred_language': preferredLanguage,
+    'preferred_market': preferredMarket,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   };
 }
@@ -238,8 +252,16 @@ class BillingSubscriptionModel {
   final String? stripeSubscriptionId;
   final String? stripePriceId;
   final String? stripeProductId;
+  final int quantity;
+  final String? currency;
   final DateTime? lastPaymentAt;
   final DateTime? nextPaymentAt;
+  final String? latestInvoiceId;
+  final String? latestInvoiceStatus;
+  final String? hostedInvoiceUrl;
+  final bool paymentIssue;
+  final bool paymentActionRequired;
+  final DateTime? trialEndingNotifiedAt;
   final Map<String, dynamic> metadata;
   final DateTime? createdAt;
 
@@ -264,8 +286,16 @@ class BillingSubscriptionModel {
     this.stripeSubscriptionId,
     this.stripePriceId,
     this.stripeProductId,
+    this.quantity = 1,
+    this.currency,
     this.lastPaymentAt,
     this.nextPaymentAt,
+    this.latestInvoiceId,
+    this.latestInvoiceStatus,
+    this.hostedInvoiceUrl,
+    this.paymentIssue = false,
+    this.paymentActionRequired = false,
+    this.trialEndingNotifiedAt,
     this.metadata = const {},
     this.createdAt,
   });
@@ -292,8 +322,17 @@ class BillingSubscriptionModel {
         stripeSubscriptionId: json['stripe_subscription_id'] as String?,
         stripePriceId: json['stripe_price_id'] as String?,
         stripeProductId: json['stripe_product_id'] as String?,
+        quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+        currency: json['currency'] as String?,
         lastPaymentAt: _dt(json['last_payment_at']),
         nextPaymentAt: _dt(json['next_payment_at']),
+        latestInvoiceId: json['latest_invoice_id'] as String?,
+        latestInvoiceStatus: json['latest_invoice_status'] as String?,
+        hostedInvoiceUrl: json['hosted_invoice_url'] as String?,
+        paymentIssue: json['payment_issue'] as bool? ?? false,
+        paymentActionRequired:
+            json['payment_action_required'] as bool? ?? false,
+        trialEndingNotifiedAt: _dt(json['trial_ending_notified_at']),
         metadata: json['metadata'] is Map
             ? Map<String, dynamic>.from(json['metadata'] as Map)
             : const {},
@@ -645,6 +684,7 @@ class DigitalProfileModel {
   final String status;
   final bool isDefault;
   final bool showVerifiedBadge;
+  final String publicLocale;
   final ProfileThemeModel? theme;
   final ProfileVcardModel? vcard;
   final List<ProfileLinkModel> links;
@@ -665,6 +705,7 @@ class DigitalProfileModel {
     this.status = 'active',
     this.isDefault = false,
     this.showVerifiedBadge = false,
+    this.publicLocale = 'es-MX',
     this.theme,
     this.vcard,
     this.links = const [],
@@ -709,6 +750,7 @@ class DigitalProfileModel {
       status: json['status'] as String? ?? 'active',
       isDefault: json['is_default'] as bool? ?? false,
       showVerifiedBadge: json['show_verified_badge'] as bool? ?? false,
+      publicLocale: json['public_locale'] as String? ?? 'es-MX',
       theme: themeJson == null ? null : ProfileThemeModel.fromJson(themeJson),
       vcard: vcardJson == null ? null : ProfileVcardModel.fromJson(vcardJson),
       links: links,
@@ -728,6 +770,7 @@ class DigitalProfileModel {
     'status': status,
     'is_default': isDefault,
     'show_verified_badge': showVerifiedBadge,
+    'public_locale': publicLocale,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   };
 
@@ -743,6 +786,7 @@ class DigitalProfileModel {
     bool clearLogoUrl = false,
     String? status,
     bool? showVerifiedBadge,
+    String? publicLocale,
     ProfileThemeModel? theme,
     ProfileVcardModel? vcard,
     List<ProfileLinkModel>? links,
@@ -762,6 +806,7 @@ class DigitalProfileModel {
     status: status ?? this.status,
     isDefault: isDefault,
     showVerifiedBadge: showVerifiedBadge ?? this.showVerifiedBadge,
+    publicLocale: publicLocale ?? this.publicLocale,
     theme: theme ?? this.theme,
     vcard: vcard ?? this.vcard,
     links: links ?? this.links,
