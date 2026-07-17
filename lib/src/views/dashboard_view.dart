@@ -23519,17 +23519,48 @@ class _BillingSettingsPanel extends StatelessWidget {
     final status = _billingStatusLabel(sub);
     final statusColor = _billingStatusColor(sub);
     final t = taploeState.t;
+    final billingScopeLabel = isOrgBilling
+        ? t.text('Empresa / equipo', 'Business / team')
+        : t.text('Individual', 'Individual');
+    final ownerLabel = isOrgBilling
+        ? organization?.name ?? t.text('Organización', 'Organization')
+        : user.username;
+    final renewalLabel = sub == null
+        ? t.text('Sin suscripción', 'No subscription')
+        : sub.cancelAtPeriodEnd
+        ? t.text('Cancelada al final del periodo', 'Canceled at period end')
+        : sub.grantsAccess
+        ? t.text('Activa', 'Active')
+        : t.text('Inactiva', 'Inactive');
+    final paymentDateLabel = _dateLabel(sub?.nextChargeAt);
+    final manageScope = isOrgBilling ? 'organization' : 'user';
     return TaploePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PanelHeader(
-            title: t.billing,
-            icon: Icons.receipt_long_outlined,
-            trailing: capabilities.label,
+          Row(
+            children: [
+              const Icon(
+                Icons.receipt_long_outlined,
+                color: TaploeColors.blue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  t.billing,
+                  style: GoogleFonts.outfit(
+                    color: context.text,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _BillingPlanBadge(label: capabilities.label),
+            ],
           ),
-          const SizedBox(height: 14),
-          _BillingStatusBanner(
+          const SizedBox(height: 12),
+          _BillingStatusLine(
             label: status,
             color: statusColor,
             message: _billingStatusMessage(
@@ -23538,133 +23569,147 @@ class _BillingSettingsPanel extends StatelessWidget {
               organization: organization,
             ),
           ),
-          const SizedBox(height: 14),
-          _InfoLine(label: t.currentPlan, value: capabilities.label),
-          _InfoLine(
+          const SizedBox(height: 18),
+          const Divider(height: 1, color: TaploeColors.border),
+          const SizedBox(height: 18),
+          _BillingDetailRow(label: t.currentPlan, value: capabilities.label),
+          _BillingDetailRow(
             label: t.text('Tipo de plan', 'Plan type'),
-            value: isOrgBilling
-                ? t.text('Empresa / equipo', 'Business / team')
-                : t.text('Individual', 'Individual'),
+            value: billingScopeLabel,
           ),
-          _InfoLine(
+          _BillingDetailRow(
             label: t.text('Responsable', 'Owner'),
-            value: isOrgBilling
-                ? organization?.name ?? t.text('Organización', 'Organization')
-                : user.username,
+            value: ownerLabel,
           ),
-          _InfoLine(
+          _BillingDetailRow(
             label: t.text('Ciclo', 'Cycle'),
             value: _billingIntervalLabel(sub?.billingInterval),
           ),
-          _InfoLine(
-            label: t.text('Prueba termina', 'Trial ends'),
-            value: _dateLabel(sub?.trialEnd),
-          ),
-          _InfoLine(
+          _BillingDetailRow(
             label: sub?.cancelAtPeriodEnd == true
                 ? t.text('Acceso hasta', 'Access until')
                 : t.text('Próximo pago', 'Next payment'),
-            value: _dateLabel(sub?.nextChargeAt),
+            value: paymentDateLabel,
           ),
-          _InfoLine(
+          _BillingDetailRow(
             label: t.text('Renovación automática', 'Auto-renewal'),
-            value: sub == null
-                ? t.text('Sin suscripción', 'No subscription')
-                : sub.cancelAtPeriodEnd
-                ? t.text(
-                    'Cancelada al final del periodo',
-                    'Canceled at period end',
-                  )
-                : sub.grantsAccess
-                ? t.text('Activa', 'Active')
-                : t.text('Inactiva', 'Inactive'),
+            value: renewalLabel,
           ),
           if (sub?.isPastDue == true) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _BillingWarningLine(
               text:
                   'El pago está pendiente. Si supera ${_dateLabel(sub?.graceUntil)}, el sistema quitará beneficios automáticamente sin borrar tus datos.',
             ),
           ],
           if (sub == null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const _BillingWarningLine(
               text:
                   'No hay una suscripción registrada en billing_subscriptions. La app no otorgará beneficios de pago hasta que exista una suscripción vigente.',
             ),
           ],
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              TaploeButton(
-                width: 170,
-                label: t.changePlan,
-                icon: Icons.workspace_premium_outlined,
-                kind: TaploeButtonKind.secondary,
-                onPressed: () => _showPlansDialog(context),
-              ),
-              TaploeButton(
-                width: 210,
-                label: t.manageSubscription,
-                icon: Icons.credit_card_outlined,
-                kind: TaploeButtonKind.secondary,
-                onPressed: hasStripe && ownerCanManage
-                    ? () => _openBillingPortal(
-                        context,
-                        scope: isOrgBilling ? 'organization' : 'user',
-                      )
-                    : null,
-              ),
-              TaploeButton(
-                width: 190,
-                label: sub?.cancelAtPeriodEnd == true ? t.resume : t.cancel,
-                icon: sub?.cancelAtPeriodEnd == true
-                    ? Icons.restart_alt_rounded
-                    : Icons.cancel_outlined,
-                kind: TaploeButtonKind.secondary,
-                onPressed: hasStripe && ownerCanManage
-                    ? () => _openBillingPortal(
-                        context,
-                        scope: isOrgBilling ? 'organization' : 'user',
-                      )
-                    : null,
-              ),
-            ],
+          const SizedBox(height: 18),
+          const Divider(height: 1, color: TaploeColors.border),
+          const SizedBox(height: 18),
+          _BillingActionRow(
+            cancelLabel: sub?.cancelAtPeriodEnd == true ? t.resume : t.cancel,
+            canManage: hasStripe && ownerCanManage,
+            onChangePlan: () => _showPlansDialog(context),
+            onManageSubscription: hasStripe && ownerCanManage
+                ? () => _openBillingPortal(context, scope: manageScope)
+                : null,
+            onCancel: hasStripe && ownerCanManage
+                ? () => _openBillingPortal(context, scope: manageScope)
+                : null,
           ),
-          if (!ownerCanManage) ...[
-            const SizedBox(height: 10),
-            const _MutedText(
-              'Solo el owner que contrató la suscripción puede cambiar pago, cancelar o reanudar.',
-            ),
-          ],
-          if (!hasStripe && sub != null) ...[
-            const SizedBox(height: 10),
-            const _MutedText(
-              'Esta suscripción todavía no tiene stripe_subscription_id; las acciones de cobro se activan al conectar Stripe.',
+          if (!ownerCanManage || (!hasStripe && sub != null)) ...[
+            const SizedBox(height: 12),
+            _BillingQuietNote(
+              text: !ownerCanManage
+                  ? t.text(
+                      'Solo el owner que contrató la suscripción puede cambiar pago, cancelar o reanudar.',
+                      'Only the owner who purchased the subscription can change payment, cancel, or resume.',
+                    )
+                  : t.text(
+                      'Las acciones de cobro se activan cuando Stripe sincronice esta suscripción.',
+                      'Billing actions become available when Stripe syncs this subscription.',
+                    ),
             ),
           ],
           const SizedBox(height: 18),
-          _PanelHeader(title: t.paymentHistory, icon: Icons.payments_outlined),
+          const Divider(height: 1, color: TaploeColors.border),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Icon(
+                Icons.payments_outlined,
+                color: TaploeColors.blue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  t.paymentHistory,
+                  style: GoogleFonts.outfit(
+                    color: context.text,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           if (invoices.isEmpty)
             _MutedText(t.noInvoices)
           else
             for (final invoice in invoices.take(6))
               _BillingInvoiceRow(invoice: invoice),
+          const SizedBox(height: 18),
+          _BillingSecureNote(
+            text: t.text(
+              'Tus pagos se procesan de forma segura a través de Stripe.',
+              'Your payments are processed securely through Stripe.',
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _BillingStatusBanner extends StatelessWidget {
+class _BillingPlanBadge extends StatelessWidget {
+  final String label;
+
+  const _BillingPlanBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: TaploeColors.blue.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          color: TaploeColors.blue,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _BillingStatusLine extends StatelessWidget {
   final String label;
   final Color color;
   final String message;
 
-  const _BillingStatusBanner({
+  const _BillingStatusLine({
     required this.label,
     required this.color,
     required this.message,
@@ -23672,44 +23717,184 @@ class _BillingStatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .09),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: .28)),
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(top: 7),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BillingDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _BillingDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, color: color, size: 20),
-          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: GoogleFonts.dmSans(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: GoogleFonts.dmSans(
-                    color: context.text,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BillingActionRow extends StatelessWidget {
+  final String cancelLabel;
+  final bool canManage;
+  final VoidCallback onChangePlan;
+  final VoidCallback? onManageSubscription;
+  final VoidCallback? onCancel;
+
+  const _BillingActionRow({
+    required this.cancelLabel,
+    required this.canManage,
+    required this.onChangePlan,
+    required this.onManageSubscription,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        TaploeButton(
+          width: 178,
+          label: taploeState.t.changePlan,
+          icon: Icons.workspace_premium_outlined,
+          kind: TaploeButtonKind.secondary,
+          onPressed: onChangePlan,
+        ),
+        TaploeButton(
+          width: 225,
+          label: taploeState.t.manageSubscription,
+          icon: Icons.credit_card_outlined,
+          kind: TaploeButtonKind.secondary,
+          onPressed: canManage ? onManageSubscription : null,
+        ),
+        TextButton(
+          onPressed: canManage ? onCancel : null,
+          style: TextButton.styleFrom(
+            foregroundColor: TaploeColors.error,
+            disabledForegroundColor: TaploeColors.muted,
+            textStyle: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          child: Text(cancelLabel),
+        ),
+      ],
+    );
+  }
+}
+
+class _BillingQuietNote extends StatelessWidget {
+  final String text;
+
+  const _BillingQuietNote({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: GoogleFonts.dmSans(
+        color: context.muted,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 1.35,
+      ),
+    );
+  }
+}
+
+class _BillingSecureNote extends StatelessWidget {
+  final String text;
+
+  const _BillingSecureNote({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(
+          Icons.lock_outline_rounded,
+          size: 16,
+          color: TaploeColors.muted,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
