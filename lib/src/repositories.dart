@@ -1160,39 +1160,92 @@ class ProfileRepository {
   ) async {
     final orgId = profile.orgId;
     if (orgId == null || orgId.isEmpty) return profile;
+    Map<String, dynamic>? row;
     try {
-      final raw = await _db.rpc(
-        'public_profile_organization_branding',
-        params: {'p_profile_id': profile.id},
-      );
-      final row = raw is List && raw.isNotEmpty
-          ? Map<String, dynamic>.from(raw.first as Map)
-          : raw is Map
-          ? Map<String, dynamic>.from(raw)
-          : const <String, dynamic>{};
-      final logoUrl = row['company_logo_url']?.toString().trim();
-      final coverPhotoUrl = row['cover_photo_url']?.toString().trim();
-      final enforceTheme = row['enforce_team_profile_theme'] == true;
-      final teamThemeRaw = row['team_profile_theme'];
-      final teamTheme = teamThemeRaw is Map
-          ? ProfileThemeModel.fromJson({
-              'profile_id': profile.id,
-              ...Map<String, dynamic>.from(teamThemeRaw),
-            })
-          : null;
-      return profile.copyWith(
-        logoUrl: logoUrl == null || logoUrl.isEmpty ? profile.logoUrl : logoUrl,
-        coverPhotoUrl:
-            enforceTheme && coverPhotoUrl != null && coverPhotoUrl.isNotEmpty
-            ? coverPhotoUrl
-            : profile.coverPhotoUrl,
-        theme: enforceTheme && teamTheme != null ? teamTheme : profile.theme,
+      row = _firstMap(
+        await _db.rpc(
+          'public_profile_organization_branding',
+          params: {'p_profile_id': profile.id},
+        ),
       );
     } catch (error) {
-      debugPrint('[TaploeProfiles] No se pudo cargar branding público.');
+      debugPrint(
+        '[TaploeProfiles] No se pudo cargar branding público por RPC.',
+      );
       safePrintError(error);
-      return profile;
     }
+    row ??= await _fetchPublicOrganizationBrandingFallback(profile);
+    if (row == null || row.isEmpty) return profile;
+    return _applyPublicOrganizationBranding(profile, row);
+  }
+
+  static Map<String, dynamic>? _firstMap(dynamic raw) {
+    if (raw is List && raw.isNotEmpty && raw.first is Map) {
+      return Map<String, dynamic>.from(raw.first as Map);
+    }
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> _fetchPublicOrganizationBrandingFallback(
+    DigitalProfileModel profile,
+  ) async {
+    final orgId = profile.orgId;
+    if (orgId == null || orgId.isEmpty) return null;
+    try {
+      return _firstMap(
+        await _db
+            .from('organizations')
+            .select(
+              'company_logo_url,enforce_team_profile_theme,team_profile_theme',
+            )
+            .eq('id', orgId)
+            .eq('status', 'active')
+            .maybeSingle(),
+      );
+    } catch (error) {
+      debugPrint(
+        '[TaploeProfiles] No se pudo cargar branding público por tabla.',
+      );
+      safePrintError(error);
+      return null;
+    }
+  }
+
+  static DigitalProfileModel _applyPublicOrganizationBranding(
+    DigitalProfileModel profile,
+    Map<String, dynamic> row,
+  ) {
+    final companyLogoUrl = row['company_logo_url']?.toString().trim();
+    final teamThemeRaw = row['team_profile_theme'];
+    final teamThemeMap = teamThemeRaw is Map
+        ? Map<String, dynamic>.from(teamThemeRaw)
+        : null;
+    final teamLogoUrl = teamThemeMap?['logo_url']?.toString().trim();
+    final logoUrl = companyLogoUrl != null && companyLogoUrl.isNotEmpty
+        ? companyLogoUrl
+        : teamLogoUrl != null && teamLogoUrl.isNotEmpty
+        ? teamLogoUrl
+        : profile.logoUrl;
+    final coverPhotoUrl =
+        row['cover_photo_url']?.toString().trim().isNotEmpty == true
+        ? row['cover_photo_url'].toString().trim()
+        : teamThemeMap?['cover_photo_url']?.toString().trim();
+    final enforceTheme = row['enforce_team_profile_theme'] == true;
+    final teamTheme = teamThemeMap == null
+        ? null
+        : ProfileThemeModel.fromJson({
+            'profile_id': profile.id,
+            ...teamThemeMap,
+          });
+    return profile.copyWith(
+      logoUrl: logoUrl,
+      coverPhotoUrl:
+          enforceTheme && coverPhotoUrl != null && coverPhotoUrl.isNotEmpty
+          ? coverPhotoUrl
+          : profile.coverPhotoUrl,
+      theme: enforceTheme && teamTheme != null ? teamTheme : profile.theme,
+    );
   }
 
   static Future<DigitalProfileModel> _withOrganizationBranding(
