@@ -12,13 +12,17 @@ final taploeRouter = GoRouter(
   initialLocation: '/',
   redirect: (context, state) {
     final path = state.uri.path;
-    final public =
+    final publicContent =
+        path == '/p' ||
         path.startsWith('/p/') ||
+        path == '/a' ||
         path.startsWith('/a/') ||
-        path.startsWith('/activate/') ||
-        path == '/login' ||
-        path == '/otp' ||
-        path == '/auth-loading';
+        path.startsWith('/activate/');
+    final authRoute =
+        path == '/login' || path == '/otp' || path == '/auth-loading';
+    final public = publicContent || authRoute;
+
+    if (publicContent) return null;
 
     if (taploeState.bootstrapping) {
       final hasAuthSession = taploeState.client.auth.currentUser != null;
