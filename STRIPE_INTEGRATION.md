@@ -48,6 +48,7 @@ STRIPE_BUSINESS_MONTHLY_PRICE_ID_MXN
 STRIPE_BUSINESS_ANNUAL_PRICE_ID_MXN
 APP_URL
 STRIPE_ENV
+TAPLOE_USD_MXN_RATE
 ```
 
 Supabase también provee `SUPABASE_URL`, `SUPABASE_SECRET_KEYS`, `SUPABASE_PUBLISHABLE_KEYS`, y en proyectos legacy `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_ANON_KEY`.
@@ -75,6 +76,13 @@ Flutter solo manda:
 ```
 
 Nunca manda Price ID, Product ID, importe, currency, user_id, customer ID, URLs ni días de trial.
+
+La app muestra precios desde el catálogo local `lib/src/pricing.dart` con los precios base USD de Stripe:
+
+- Premium: `9.99 USD` mensual y `87.99 USD` anual.
+- Business: `4.99 USD` mensual por perfil y `43.99 USD` anual por perfil.
+
+Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `18`. Ese valor debe ser el mismo tipo de cambio usado al crear o actualizar los Price IDs MXN en Stripe, porque Checkout cobra con Price IDs reales de Stripe y la app solo muestra el estimado visible.
 
 ## Trial
 

@@ -22,6 +22,7 @@ import '../company_logo_drop.dart';
 import '../localization.dart';
 import '../models.dart';
 import '../plan_capabilities.dart';
+import '../pricing.dart';
 import '../profile_public_card.dart';
 import '../pwa_install_panel.dart';
 import '../qr_scanner.dart';
@@ -2397,6 +2398,7 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
   _EntryDialogPlan? plan;
   _EntryDialogPlan? comparisonCheckoutPlan;
   _EntryBillingCycle billingCycle = _EntryBillingCycle.annual;
+  int businessQuantity = TaploePricing.businessMinProfiles;
   late bool showPlanComparison;
   bool checkout = false;
 
@@ -2410,6 +2412,9 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
     setState(() {
       plan = value;
       billingCycle = _EntryBillingCycle.annual;
+      if (value == _EntryDialogPlan.team) {
+        businessQuantity = TaploePricing.businessMinProfiles;
+      }
       checkout = false;
     });
   }
@@ -2454,8 +2459,12 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
             mobile: mobile,
             plan: checkoutPlan,
             billingCycle: billingCycle,
+            businessQuantity: businessQuantity,
             onBillingCycleChanged: (value) {
               setState(() => billingCycle = value);
+            },
+            onBusinessQuantityChanged: (value) {
+              setState(() => businessQuantity = value);
             },
             onBack: () => setState(() => comparisonCheckoutPlan = null),
             onClose: () => Navigator.of(context).pop(),
@@ -2479,6 +2488,7 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
             setState(() {
               comparisonCheckoutPlan = _EntryDialogPlan.team;
               billingCycle = _EntryBillingCycle.annual;
+              businessQuantity = TaploePricing.businessMinProfiles;
             });
           },
           onProposal: () {
@@ -2510,10 +2520,14 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
             mobile: mobile,
             plan: plan!,
             billingCycle: billingCycle,
+            businessQuantity: businessQuantity,
             onBillingCycleChanged: (value) {
               setState(() {
                 billingCycle = value;
               });
+            },
+            onBusinessQuantityChanged: (value) {
+              setState(() => businessQuantity = value);
             },
             onBack: _goBack,
           )
@@ -2576,13 +2590,38 @@ class _EntryPlanComparisonView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final horizontal = mobile ? 20.0 : 52.0;
+    final locale = taploeState.localeConfig;
+    final t = taploeState.t;
+    final premiumAnnualMonthly = TaploePricing.monthlyEquivalent(
+      plan: TaploeCatalogPlan.premium,
+      period: TaploeCatalogPeriod.annual,
+      locale: locale,
+    );
+    final premiumMonthly = TaploePricing.unitPrice(
+      plan: TaploeCatalogPlan.premium,
+      period: TaploeCatalogPeriod.monthly,
+      locale: locale,
+    );
+    final businessAnnualMonthly = TaploePricing.monthlyEquivalent(
+      plan: TaploeCatalogPlan.business,
+      period: TaploeCatalogPeriod.annual,
+      locale: locale,
+    );
+    final businessMonthly = TaploePricing.unitPrice(
+      plan: TaploeCatalogPlan.business,
+      period: TaploeCatalogPeriod.monthly,
+      locale: locale,
+    );
     final cards = [
       _PlanComparisonCard(
         title: 'Taploe Premium',
         subtitle: 'Más personalización y herramientas para vender mejor.',
-        price: r'$131.94',
-        cadence: '/mes',
-        note: r'Mejor precio anual · mensual $179.82',
+        price: premiumAnnualMonthly.format(),
+        cadence: ' ${t.perMonth}',
+        note: t.text(
+          'Mejor precio anual · mensual ${premiumMonthly.format()}',
+          'Best annual price · monthly ${premiumMonthly.format()}',
+        ),
         badge: 'Recomendado',
         highlighted: true,
         buttonLabel: 'Probar 7 días gratis',
@@ -2597,9 +2636,12 @@ class _EntryPlanComparisonView extends StatelessWidget {
       _PlanComparisonCard(
         title: 'Empresas',
         subtitle: 'Control, consistencia y medición para equipos.',
-        price: r'$89.82',
-        cadence: '/mes',
-        note: r'Por perfil, facturado anual · mensual $115.52',
+        price: businessAnnualMonthly.format(),
+        cadence: ' ${t.perProfilePerMonth}',
+        note: t.text(
+          'Por perfil, facturado anual · mensual ${businessMonthly.format()}',
+          'Per profile, billed annually · monthly ${businessMonthly.format()}',
+        ),
         buttonLabel: 'Probar 7 días gratis',
         onPressed: onTeam,
         features: const [
@@ -2778,7 +2820,9 @@ class _EntryPlanCheckoutView extends StatelessWidget {
   final bool mobile;
   final _EntryDialogPlan plan;
   final _EntryBillingCycle billingCycle;
+  final int businessQuantity;
   final ValueChanged<_EntryBillingCycle> onBillingCycleChanged;
+  final ValueChanged<int> onBusinessQuantityChanged;
   final VoidCallback onBack;
   final VoidCallback onClose;
 
@@ -2786,7 +2830,9 @@ class _EntryPlanCheckoutView extends StatelessWidget {
     required this.mobile,
     required this.plan,
     required this.billingCycle,
+    required this.businessQuantity,
     required this.onBillingCycleChanged,
+    required this.onBusinessQuantityChanged,
     required this.onBack,
     required this.onClose,
   });
@@ -2797,7 +2843,9 @@ class _EntryPlanCheckoutView extends StatelessWidget {
       mobile: mobile,
       plan: plan,
       billingCycle: billingCycle,
+      businessQuantity: businessQuantity,
       onBillingCycleChanged: onBillingCycleChanged,
+      onBusinessQuantityChanged: onBusinessQuantityChanged,
       onBack: onBack,
     );
 
@@ -3436,14 +3484,18 @@ class _EntryDialogCheckoutContent extends StatefulWidget {
   final bool mobile;
   final _EntryDialogPlan plan;
   final _EntryBillingCycle billingCycle;
+  final int businessQuantity;
   final ValueChanged<_EntryBillingCycle> onBillingCycleChanged;
+  final ValueChanged<int> onBusinessQuantityChanged;
   final VoidCallback onBack;
 
   const _EntryDialogCheckoutContent({
     required this.mobile,
     required this.plan,
     required this.billingCycle,
+    required this.businessQuantity,
     required this.onBillingCycleChanged,
+    required this.onBusinessQuantityChanged,
     required this.onBack,
   });
 
@@ -3466,7 +3518,7 @@ class _EntryDialogCheckoutContentState
         billingPeriod: widget.billingCycle == _EntryBillingCycle.annual
             ? 'annual'
             : 'monthly',
-        quantity: isTeam ? 5 : 1,
+        quantity: isTeam ? widget.businessQuantity : 1,
         language: taploeState.localeConfig.languageCode,
         market: taploeState.localeConfig.marketCode,
         locale: taploeState.localeConfig.localeCode,
@@ -3491,31 +3543,91 @@ class _EntryDialogCheckoutContentState
     }
   }
 
+  String _checkoutOptionPrice({
+    required TaploeCatalogPlan plan,
+    required TaploeCatalogPeriod period,
+    required int quantity,
+  }) {
+    final locale = taploeState.localeConfig;
+    final t = taploeState.t;
+    final unit = TaploePricing.unitPrice(
+      plan: plan,
+      period: period,
+      locale: locale,
+    );
+    final monthlyEquivalent = TaploePricing.monthlyEquivalent(
+      plan: plan,
+      period: period,
+      locale: locale,
+    );
+    if (plan == TaploeCatalogPlan.business) {
+      final total = TaploePricing.total(
+        plan: plan,
+        period: period,
+        locale: locale,
+        quantity: quantity,
+      );
+      if (period == TaploeCatalogPeriod.annual) {
+        return t.text(
+          '${unit.format()} ${t.perProfilePerYear} · $quantity perfiles = ${total.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perProfilePerMonth})',
+          '${unit.format()} ${t.perProfilePerYear} · $quantity profiles = ${total.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perProfilePerMonth})',
+        );
+      }
+      return t.text(
+        '${unit.format()} ${t.perProfilePerMonth} · $quantity perfiles = ${total.format()} ${t.perMonth}',
+        '${unit.format()} ${t.perProfilePerMonth} · $quantity profiles = ${total.format()} ${t.perMonth}',
+      );
+    }
+    if (period == TaploeCatalogPeriod.annual) {
+      return '${unit.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perMonth})';
+    }
+    return '${unit.format()} ${t.perMonth}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isTeam = widget.plan == _EntryDialogPlan.team;
     const trialDays = 7;
-    final title = isTeam
-        ? 'Prueba Taploe Empresas gratis'
-        : 'Prueba Taploe Premium gratis';
+    final t = taploeState.t;
+    final locale = taploeState.localeConfig;
+    final catalogPlan = isTeam
+        ? TaploeCatalogPlan.business
+        : TaploeCatalogPlan.premium;
     final annualSelected = widget.billingCycle == _EntryBillingCycle.annual;
-    const dueDate = '21 de julio de 2026';
-    final amount = isTeam
-        ? annualSelected
-              ? r'$5,389.20 MXN'
-              : r'$577.60 MXN'
-        : annualSelected
-        ? r'$1,583.82 MXN'
-        : r'$179.82 MXN';
-    final annualPrice = isTeam
-        ? r'$1,077.84 MXN por perfil * ($89.82 MXN/mes)'
-        : r'$1,583.82 MXN ($131.94 MXN/mes)';
-    final monthlyPrice = isTeam
-        ? r'$115.52 MXN/mes por perfil'
-        : r'$179.82 MXN/mes';
-    final badge = isTeam
-        ? 'MEJOR VALOR - AHORRA 28.61%'
-        : 'MEJOR VALOR - AHORRA 27%';
+    final selectedPeriod = annualSelected
+        ? TaploeCatalogPeriod.annual
+        : TaploeCatalogPeriod.monthly;
+    final quantity = isTeam ? widget.businessQuantity : 1;
+    final title = isTeam
+        ? t.text('Prueba Taploe Empresas gratis', 'Try Taploe Business free')
+        : t.text('Prueba Taploe Premium gratis', 'Try Taploe Premium free');
+    final dueDate = _dateLabel(
+      DateTime.now().add(const Duration(days: trialDays)),
+    );
+    final amount = TaploePricing.total(
+      plan: catalogPlan,
+      period: selectedPeriod,
+      locale: locale,
+      quantity: quantity,
+    ).format();
+    final annualPrice = _checkoutOptionPrice(
+      plan: catalogPlan,
+      period: TaploeCatalogPeriod.annual,
+      quantity: quantity,
+    );
+    final monthlyPrice = _checkoutOptionPrice(
+      plan: catalogPlan,
+      period: TaploeCatalogPeriod.monthly,
+      quantity: quantity,
+    );
+    final badge = t.text(
+      'MEJOR VALOR - AHORRA ${TaploePricing.annualSavingsPercent(catalogPlan)}%',
+      'BEST VALUE - SAVE ${TaploePricing.annualSavingsPercent(catalogPlan)}%',
+    );
+    final zeroAmount = TaploePrice(
+      amount: 0,
+      currency: locale.currencyCode,
+    ).format();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -3549,17 +3661,30 @@ class _EntryDialogCheckoutContentState
           ),
           const SizedBox(height: 14),
           _TrialCheckLine(
-            'Prueba gratis de $trialDays días, cancela cuando quieras.',
+            t.text(
+              'Prueba gratis de $trialDays días, cancela cuando quieras.',
+              '$trialDays-day free trial, cancel anytime.',
+            ),
           ),
           const SizedBox(height: 8),
-          const _TrialCheckLine(
-            'Te recordaremos antes de que termine tu prueba.',
+          _TrialCheckLine(
+            t.text(
+              'Te recordaremos antes de que termine tu prueba.',
+              'We will remind you before your trial ends.',
+            ),
           ),
           SizedBox(height: widget.mobile ? 30 : 28),
+          if (isTeam) ...[
+            _BusinessQuantitySelector(
+              quantity: widget.businessQuantity,
+              onChanged: widget.onBusinessQuantityChanged,
+            ),
+            const SizedBox(height: 18),
+          ],
           _BillingOption(
             value: _EntryBillingCycle.annual,
             groupValue: widget.billingCycle,
-            title: 'Anual',
+            title: t.annual,
             price: annualPrice,
             badge: badge,
             onChanged: widget.onBillingCycleChanged,
@@ -3568,34 +3693,27 @@ class _EntryDialogCheckoutContentState
           _BillingOption(
             value: _EntryBillingCycle.monthly,
             groupValue: widget.billingCycle,
-            title: 'Mensual',
+            title: t.monthly,
             price: monthlyPrice,
             onChanged: widget.onBillingCycleChanged,
           ),
-          SizedBox(height: widget.mobile ? 18 : 10),
-          if (isTeam)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '* 5 perfiles mínimo',
-                style: GoogleFonts.dmSans(
-                  color: context.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
           Divider(height: widget.mobile ? 30 : 24, color: TaploeColors.border),
-          _CheckoutRow(label: 'Vence el $dueDate', value: amount),
+          _CheckoutRow(
+            label: t.text('Vence el $dueDate', 'Due on $dueDate'),
+            value: amount,
+          ),
           const SizedBox(height: 10),
           _CheckoutRow(
-            label: 'Vence hoy ($trialDays días gratis)',
-            value: r'$0.00 MXN',
+            label: t.text(
+              'Vence hoy ($trialDays días gratis)',
+              'Due today ($trialDays days free)',
+            ),
+            value: zeroAmount,
             highlightLabel: true,
           ),
           const SizedBox(height: 18),
           TaploeButton(
-            label: 'Completar compra',
+            label: t.text('Completar compra', 'Complete purchase'),
             expanded: true,
             loading: loadingCheckout,
             onPressed: _completePurchase,
@@ -3630,6 +3748,181 @@ class _TrialCheckLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BusinessQuantitySelector extends StatefulWidget {
+  final int quantity;
+  final ValueChanged<int> onChanged;
+
+  const _BusinessQuantitySelector({
+    required this.quantity,
+    required this.onChanged,
+  });
+
+  @override
+  State<_BusinessQuantitySelector> createState() =>
+      _BusinessQuantitySelectorState();
+}
+
+class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.quantity.toString());
+  }
+
+  @override
+  void didUpdateWidget(covariant _BusinessQuantitySelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.quantity.toString();
+    if (_controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _setQuantity(int value) {
+    final clamped = value.clamp(
+      TaploePricing.businessMinProfiles,
+      TaploePricing.businessMaxProfiles,
+    );
+    widget.onChanged(clamped);
+    _controller.text = clamped.toString();
+  }
+
+  void _handleChanged(String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null) return;
+    if (parsed < TaploePricing.businessMinProfiles ||
+        parsed > TaploePricing.businessMaxProfiles) {
+      return;
+    }
+    widget.onChanged(parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = taploeState.t;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TaploeColors.page,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.groups_rounded, color: TaploeColors.blue, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.text('Cantidad de perfiles', 'Number of profiles'),
+                  style: GoogleFonts.dmSans(
+                    color: context.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  t.text(
+                    'Mínimo ${TaploePricing.businessMinProfiles}. Se cobrará por perfil.',
+                    'Minimum ${TaploePricing.businessMinProfiles}. Billed per profile.',
+                  ),
+                  style: GoogleFonts.dmSans(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _QuantityIconButton(
+            icon: Icons.remove_rounded,
+            onPressed: widget.quantity <= TaploePricing.businessMinProfiles
+                ? null
+                : () => _setQuantity(widget.quantity - 1),
+          ),
+          SizedBox(
+            width: 64,
+            height: 44,
+            child: TextField(
+              controller: _controller,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: _handleChanged,
+              onSubmitted: (value) =>
+                  _setQuantity(int.tryParse(value) ?? widget.quantity),
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: TaploeColors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: TaploeColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: TaploeColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: TaploeColors.blue,
+                    width: 1.6,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _QuantityIconButton(
+            icon: Icons.add_rounded,
+            onPressed: widget.quantity >= TaploePricing.businessMaxProfiles
+                ? null
+                : () => _setQuantity(widget.quantity + 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuantityIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _QuantityIconButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      height: 42,
+      child: IconButton.outlined(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+      ),
     );
   }
 }
