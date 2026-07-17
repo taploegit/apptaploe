@@ -13,7 +13,7 @@ import {
   TaploeBillingPeriod,
   TaploeCheckoutPlan,
 } from "../_shared/stripe_catalog.ts";
-import { stripeClient } from "../_shared/stripe.ts";
+import { Stripe, stripeClient } from "../_shared/stripe.ts";
 
 type CheckoutBody = {
   plan?: unknown;
@@ -203,6 +203,23 @@ async function trialAvailable(ownerUserId: string, stripeCustomerId: string): Pr
   return (data ?? []).length === 0;
 }
 
+async function assertPriceCurrency(
+  stripe: Stripe,
+  priceId: string,
+  expectedCurrency: "mxn" | "usd",
+) {
+  const price = await stripe.prices.retrieve(priceId);
+  if (price.currency.toLowerCase() !== expectedCurrency) {
+    console.error(
+      "[create-checkout-session] Price currency mismatch",
+      priceId,
+      price.currency,
+      expectedCurrency,
+    );
+    throw Object.assign(new Error("PRICE_CURRENCY_MISMATCH"), { status: 500 });
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(req);
   if (req.method !== "POST") {
@@ -253,6 +270,11 @@ serve(async (req) => {
       : "Tu suscripcion se renovara automaticamente hasta que la canceles.";
 
     const stripe = stripeClient();
+    await assertPriceCurrency(
+      stripe,
+      selectedPriceId,
+      parsed.market === "us" ? "usd" : "mxn",
+    );
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,

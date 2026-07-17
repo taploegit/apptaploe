@@ -23,7 +23,9 @@ class TaploeLocaleConfig {
   static TaploeLocaleConfig fromParts({String? language, String? market}) {
     final lang = language?.trim().toLowerCase();
     final mkt = market?.trim().toLowerCase();
-    if (lang == 'en' || mkt == 'us') return enUs;
+    if (mkt == 'us') return enUs;
+    if (mkt == 'mx') return esMx;
+    if (lang == 'en') return enUs;
     return esMx;
   }
 
