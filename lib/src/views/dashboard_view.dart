@@ -4764,7 +4764,7 @@ class _PublicSlugInputState extends State<_PublicSlugInput> {
                 Padding(
                   padding: const EdgeInsets.only(left: 26, right: 18),
                   child: Text(
-                    'taploe.com/',
+                    'app.taploe.com/',
                     style: GoogleFonts.dmSans(
                       color: focused ? TaploeColors.blue : inactiveLabelColor,
                       fontSize: context.isMobile ? 17 : 20,
@@ -6766,7 +6766,7 @@ String _createProfileErrorMessage(Object error, String requestedName) {
   if (error is ArgumentError) {
     final message = error.message?.toString();
     if (message == 'profile_slug_taken') {
-      return 'taploe.com/$requestedName ya está en uso. Elige otra ruta.';
+      return 'app.taploe.com/$requestedName ya está en uso. Elige otra ruta.';
     }
     if (message == 'profile_slug_too_short') {
       return 'La ruta debe tener al menos 3 letras o números.';
@@ -6786,7 +6786,7 @@ String _createProfileErrorMessage(Object error, String requestedName) {
     if (error.code == '23505') {
       if (combined.contains('public_slug') ||
           combined.contains('digital_profiles_public_slug_key')) {
-        return 'taploe.com/$requestedName ya está en uso. Elige otra ruta.';
+        return 'app.taploe.com/$requestedName ya está en uso. Elige otra ruta.';
       }
       if (combined.contains('profile_name') ||
           combined.contains('display_name')) {
