@@ -16,9 +16,12 @@ class TaploePrice {
 class TaploePricing {
   static final double usdToMxnRate =
       double.tryParse(
-        const String.fromEnvironment('TAPLOE_USD_MXN_RATE', defaultValue: '18'),
+        const String.fromEnvironment(
+          'TAPLOE_USD_MXN_RATE',
+          defaultValue: '17.4412366447',
+        ),
       ) ??
-      18;
+      17.4412366447;
   static const int businessMinProfiles = 5;
   static const int businessMaxProfiles = 500;
 

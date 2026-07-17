@@ -2550,7 +2550,46 @@ class _DashboardEntryDialogState extends State<_DashboardEntryDialog> {
           borderRadius: BorderRadius.circular(28),
           child: Material(
             color: TaploeColors.white,
-            child: mobile
+            child: checkout
+                ? Stack(
+                    children: [
+                      mobile
+                          ? SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  content,
+                                  _EntryCheckoutPreviewPane(
+                                    plan: plan!,
+                                    mobile: true,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Row(
+                              children: [
+                                Expanded(flex: 6, child: content),
+                                Expanded(
+                                  flex: 5,
+                                  child: _EntryCheckoutPreviewPane(plan: plan!),
+                                ),
+                              ],
+                            ),
+                      Positioned(
+                        top: 18,
+                        right: mobile ? 18 : 28,
+                        child: IconButton(
+                          tooltip: 'Cerrar',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: TaploeColors.blue,
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : mobile
                 ? SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2856,16 +2895,18 @@ class _EntryPlanCheckoutView extends StatelessWidget {
               ? SingleChildScrollView(
                   child: Column(
                     children: [
-                      const SizedBox(height: 44),
-                      const _EntryDialogVisual(mobile: true),
                       content,
+                      _EntryCheckoutPreviewPane(plan: plan, mobile: true),
                     ],
                   ),
                 )
               : Row(
                   children: [
                     Expanded(flex: 6, child: content),
-                    const Expanded(flex: 5, child: _EntryDialogVisual()),
+                    Expanded(
+                      flex: 5,
+                      child: _EntryCheckoutPreviewPane(plan: plan),
+                    ),
                   ],
                 ),
           Positioned(
@@ -3555,33 +3596,22 @@ class _EntryDialogCheckoutContentState
       period: period,
       locale: locale,
     );
-    final monthlyEquivalent = TaploePricing.monthlyEquivalent(
-      plan: plan,
-      period: period,
-      locale: locale,
-    );
     if (plan == TaploeCatalogPlan.business) {
-      final total = TaploePricing.total(
-        plan: plan,
-        period: period,
-        locale: locale,
-        quantity: quantity,
-      );
       if (period == TaploeCatalogPeriod.annual) {
         return t.text(
-          '${unit.format()} ${t.perProfilePerYear} · $quantity perfiles = ${total.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perProfilePerMonth})',
-          '${unit.format()} ${t.perProfilePerYear} · $quantity profiles = ${total.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perProfilePerMonth})',
+          '${unit.format()} por perfil al año',
+          '${unit.format()} per profile per year',
         );
       }
       return t.text(
-        '${unit.format()} ${t.perProfilePerMonth} · $quantity perfiles = ${total.format()} ${t.perMonth}',
-        '${unit.format()} ${t.perProfilePerMonth} · $quantity profiles = ${total.format()} ${t.perMonth}',
+        '${unit.format()} por perfil al mes',
+        '${unit.format()} per profile per month',
       );
     }
     if (period == TaploeCatalogPeriod.annual) {
-      return '${unit.format()} ${t.perYear} (${monthlyEquivalent.format()} ${t.perMonth})';
+      return t.text('${unit.format()} al año', '${unit.format()} per year');
     }
-    return '${unit.format()} ${t.perMonth}';
+    return t.text('${unit.format()} al mes', '${unit.format()} per month');
   }
 
   @override
@@ -3628,52 +3658,130 @@ class _EntryDialogCheckoutContentState
       amount: 0,
       currency: locale.currencyCode,
     ).format();
+    final selectedPeriodText = annualSelected
+        ? t.text('año', 'year')
+        : t.text('mes', 'month');
+    final amountAfterTrial = '$amount / $selectedPeriodText';
 
-    return Padding(
+    final horizontalPadding = widget.mobile ? 22.0 : 40.0;
+    final topPadding = widget.mobile ? 22.0 : 34.0;
+    final bodyBottomPadding = widget.mobile ? 18.0 : 22.0;
+    final footerBottomPadding = widget.mobile ? 18.0 : 22.0;
+    final checkoutFooter = Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        border: const Border(top: BorderSide(color: TaploeColors.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
       padding: EdgeInsets.fromLTRB(
-        widget.mobile ? 24 : 44,
-        widget.mobile ? 24 : 34,
-        widget.mobile ? 24 : 44,
-        widget.mobile ? 28 : 34,
+        horizontalPadding,
+        14,
+        horizontalPadding,
+        footerBottomPadding,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CheckoutPrimaryButton(
+              label: t.text('Comenzar prueba gratis', 'Start free trial'),
+              loading: loadingCheckout,
+              onPressed: _completePurchase,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.shield_outlined,
+                  color: TaploeColors.muted,
+                  size: 16,
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    t.text(
+                      'Se te recordará antes de que termine tu prueba.',
+                      'We will remind you before your trial ends.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    final checkoutBody = Padding(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        topPadding,
+        horizontalPadding,
+        bodyBottomPadding,
       ),
       child: Column(
-        mainAxisSize: widget.mobile ? MainAxisSize.min : MainAxisSize.max,
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!widget.mobile)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                tooltip: 'Volver',
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back_rounded, size: 28),
+          TextButton.icon(
+            onPressed: widget.onBack,
+            icon: const Icon(Icons.arrow_back_rounded, size: 21),
+            label: Text(t.text('Volver', 'Back')),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              foregroundColor: context.text,
+              textStyle: GoogleFonts.dmSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
               ),
             ),
-          SizedBox(height: widget.mobile ? 12 : 22),
+          ),
+          SizedBox(height: widget.mobile ? 14 : 22),
           Text(
             title,
             style: GoogleFonts.outfit(
               color: context.text,
-              fontSize: widget.mobile ? 34 : 36,
-              fontWeight: FontWeight.w600,
-              height: 1.05,
+              fontSize: widget.mobile ? 34 : 42,
+              fontWeight: FontWeight.w700,
+              height: 1,
             ),
           ),
-          const SizedBox(height: 14),
-          _TrialCheckLine(
-            t.text(
-              'Prueba gratis de $trialDays días, cancela cuando quieras.',
-              '$trialDays-day free trial, cancel anytime.',
-            ),
+          const SizedBox(height: 18),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TrialCheckLine(
+                t.text(
+                  'Prueba gratis de $trialDays días, cancela cuando quieras.',
+                  '$trialDays-day free trial, cancel anytime.',
+                ),
+                compact: true,
+              ),
+              const SizedBox(height: 12),
+              _TrialCheckLine(
+                t.text(
+                  'Te recordaremos antes de que termine tu prueba.',
+                  'We will remind you before your trial ends.',
+                ),
+                compact: true,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          _TrialCheckLine(
-            t.text(
-              'Te recordaremos antes de que termine tu prueba.',
-              'We will remind you before your trial ends.',
-            ),
-          ),
-          SizedBox(height: widget.mobile ? 30 : 28),
+          SizedBox(height: widget.mobile ? 26 : 30),
           if (isTeam) ...[
             _BusinessQuantitySelector(
               quantity: widget.businessQuantity,
@@ -3681,6 +3789,18 @@ class _EntryDialogCheckoutContentState
             ),
             const SizedBox(height: 18),
           ],
+          Text(
+            t.text(
+              'Elige tu periodo de facturación',
+              'Choose your billing period',
+            ),
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
           _BillingOption(
             value: _EntryBillingCycle.annual,
             groupValue: widget.billingCycle,
@@ -3689,7 +3809,7 @@ class _EntryDialogCheckoutContentState
             badge: badge,
             onChanged: widget.onBillingCycleChanged,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
           _BillingOption(
             value: _EntryBillingCycle.monthly,
             groupValue: widget.billingCycle,
@@ -3697,52 +3817,68 @@ class _EntryDialogCheckoutContentState
             price: monthlyPrice,
             onChanged: widget.onBillingCycleChanged,
           ),
-          Divider(height: widget.mobile ? 30 : 24, color: TaploeColors.border),
+          Divider(height: widget.mobile ? 30 : 32, color: TaploeColors.border),
           _CheckoutRow(
-            label: t.text('Vence el $dueDate', 'Due on $dueDate'),
-            value: amount,
+            label: t.text('Termina prueba', 'Trial ends'),
+            value: dueDate,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          _CheckoutRow(label: t.text('Hoy', 'Today'), value: zeroAmount),
+          const Divider(height: 28, color: TaploeColors.border),
           _CheckoutRow(
-            label: t.text(
-              'Vence hoy ($trialDays días gratis)',
-              'Due today ($trialDays days free)',
-            ),
-            value: zeroAmount,
-            highlightLabel: true,
-          ),
-          const SizedBox(height: 18),
-          TaploeButton(
-            label: t.text('Completar compra', 'Complete purchase'),
-            expanded: true,
-            loading: loadingCheckout,
-            onPressed: _completePurchase,
+            label: t.text('Después del trial', 'After trial'),
+            value: amountAfterTrial,
           ),
         ],
       ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final boundedHeight =
+            constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
+        if (!boundedHeight) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [checkoutBody, checkoutFooter],
+          );
+        }
+        return Column(
+          children: [
+            Expanded(child: SingleChildScrollView(child: checkoutBody)),
+            checkoutFooter,
+          ],
+        );
+      },
     );
   }
 }
 
 class _TrialCheckLine extends StatelessWidget {
   final String label;
+  final bool compact;
 
-  const _TrialCheckLine(this.label);
+  const _TrialCheckLine(this.label, {this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.check_rounded, color: TaploeColors.success, size: 26),
-        const SizedBox(width: 14),
-        Expanded(
+        Icon(
+          Icons.check_rounded,
+          color: TaploeColors.success,
+          size: compact ? 20 : 26,
+        ),
+        SizedBox(width: compact ? 8 : 14),
+        Flexible(
           child: Text(
             label,
             style: GoogleFonts.dmSans(
               color: context.text,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+              fontSize: compact ? 15 : 18,
+              fontWeight: FontWeight.w700,
               height: 1.25,
             ),
           ),
@@ -3768,6 +3904,7 @@ class _BusinessQuantitySelector extends StatefulWidget {
 
 class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
   late final TextEditingController _controller;
+  Timer? _minimumResetTimer;
 
   @override
   void initState() {
@@ -3786,11 +3923,13 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
 
   @override
   void dispose() {
+    _minimumResetTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
   void _setQuantity(int value) {
+    _minimumResetTimer?.cancel();
     final clamped = value.clamp(
       TaploePricing.businessMinProfiles,
       TaploePricing.businessMaxProfiles,
@@ -3802,8 +3941,20 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
   void _handleChanged(String value) {
     final parsed = int.tryParse(value);
     if (parsed == null) return;
-    if (parsed < TaploePricing.businessMinProfiles ||
-        parsed > TaploePricing.businessMaxProfiles) {
+    if (parsed < TaploePricing.businessMinProfiles) {
+      _minimumResetTimer?.cancel();
+      _minimumResetTimer = Timer(const Duration(milliseconds: 650), () {
+        if (!mounted) return;
+        final current = int.tryParse(_controller.text);
+        if (current != null && current < TaploePricing.businessMinProfiles) {
+          _setQuantity(TaploePricing.businessMinProfiles);
+        }
+      });
+      return;
+    }
+    _minimumResetTimer?.cancel();
+    if (parsed > TaploePricing.businessMaxProfiles) {
+      _setQuantity(TaploePricing.businessMaxProfiles);
       return;
     }
     widget.onChanged(parsed);
@@ -3813,9 +3964,9 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
   Widget build(BuildContext context) {
     final t = taploeState.t;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
-        color: TaploeColors.page,
+        color: TaploeColors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: TaploeColors.border),
       ),
@@ -3828,10 +3979,10 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  t.text('Cantidad de perfiles', 'Number of profiles'),
+                  t.text('Perfiles', 'Profiles'),
                   style: GoogleFonts.dmSans(
                     color: context.text,
-                    fontSize: 15,
+                    fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -3857,6 +4008,7 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
                 ? null
                 : () => _setQuantity(widget.quantity - 1),
           ),
+          const SizedBox(width: 6),
           SizedBox(
             width: 64,
             height: 44,
@@ -3895,6 +4047,7 @@ class _BusinessQuantitySelectorState extends State<_BusinessQuantitySelector> {
               ),
             ),
           ),
+          const SizedBox(width: 6),
           _QuantityIconButton(
             icon: Icons.add_rounded,
             onPressed: widget.quantity >= TaploePricing.businessMaxProfiles
@@ -3955,18 +4108,19 @@ class _BillingOption extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
           decoration: BoxDecoration(
             color: selected
                 ? TaploeColors.blue.withValues(alpha: .06)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+                : TaploeColors.white,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? TaploeColors.blue : Colors.transparent,
+              color: selected ? TaploeColors.blue : TaploeColors.border,
+              width: selected ? 1.5 : 1,
             ),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
                 selected
@@ -3982,8 +4136,8 @@ class _BillingOption extends StatelessWidget {
                   children: [
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 12,
-                      runSpacing: 8,
+                      spacing: 10,
+                      runSpacing: 6,
                       children: [
                         Text(
                           title,
@@ -4023,8 +4177,8 @@ class _BillingOption extends StatelessWidget {
                       price,
                       style: GoogleFonts.dmSans(
                         color: context.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -4038,16 +4192,61 @@ class _BillingOption extends StatelessWidget {
   }
 }
 
+class _CheckoutPrimaryButton extends StatelessWidget {
+  final String label;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  const _CheckoutPrimaryButton({
+    required this.label,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 58,
+      child: FilledButton(
+        onPressed: loading ? null : onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: TaploeColors.blue,
+          foregroundColor: TaploeColors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(TaploeRadius.pill),
+          ),
+          textStyle: GoogleFonts.dmSans(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: TaploeColors.white,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(child: Center(child: Text(label))),
+                  const Icon(Icons.arrow_forward_rounded, size: 24),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
 class _CheckoutRow extends StatelessWidget {
   final String label;
   final String value;
-  final bool highlightLabel;
 
-  const _CheckoutRow({
-    required this.label,
-    required this.value,
-    this.highlightLabel = false,
-  });
+  const _CheckoutRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -4057,7 +4256,7 @@ class _CheckoutRow extends StatelessWidget {
           child: Text(
             label,
             style: GoogleFonts.dmSans(
-              color: highlightLabel ? TaploeColors.success : context.muted,
+              color: context.muted,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -4122,6 +4321,124 @@ class _EntryDialogVisual extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EntryCheckoutPreviewPane extends StatelessWidget {
+  final _EntryDialogPlan plan;
+  final bool mobile;
+
+  const _EntryCheckoutPreviewPane({required this.plan, this.mobile = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final isTeam = plan == _EntryDialogPlan.team;
+    final t = taploeState.t;
+    final benefits = isTeam
+        ? [
+            (
+              Icons.groups_rounded,
+              t.text('Administra perfiles', 'Manage profiles'),
+            ),
+            (
+              Icons.palette_outlined,
+              t.text('Imagen consistente', 'Consistent branding'),
+            ),
+            (
+              Icons.bar_chart_rounded,
+              t.text('Leads centralizados', 'Centralized leads'),
+            ),
+          ]
+        : [
+            (
+              Icons.visibility_off_outlined,
+              t.text('Perfil sin marca Taploe', 'Taploe-free profile'),
+            ),
+            (
+              Icons.insights_rounded,
+              t.text('Analítica avanzada', 'Advanced analytics'),
+            ),
+            (
+              Icons.palette_outlined,
+              t.text('Diseño personalizado', 'Custom design'),
+            ),
+          ];
+
+    return Container(
+      width: double.infinity,
+      height: mobile ? null : double.infinity,
+      color: const Color(0xFFF4F5F7),
+      padding: EdgeInsets.fromLTRB(
+        mobile ? 24 : 36,
+        mobile ? 24 : 34,
+        mobile ? 24 : 36,
+        mobile ? 30 : 30,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: mobile ? 280 : 340,
+              maxHeight: mobile ? 360 : 520,
+            ),
+            child: Image.asset(
+              'assets/images/perfil-alerta.png',
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.phone_iphone_rounded,
+                color: TaploeColors.blue,
+                size: 120,
+              ),
+            ),
+          ),
+          const SizedBox(height: 26),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              children: [
+                for (var i = 0; i < benefits.length; i++) ...[
+                  _CheckoutPreviewBenefit(
+                    icon: benefits[i].$1,
+                    label: benefits[i].$2,
+                  ),
+                  if (i != benefits.length - 1)
+                    const Divider(height: 18, color: TaploeColors.border),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckoutPreviewBenefit extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _CheckoutPreviewBenefit({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: TaploeColors.blue, size: 23),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: context.text,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

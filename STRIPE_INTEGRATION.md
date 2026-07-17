@@ -82,7 +82,7 @@ La app muestra precios desde el catálogo local `lib/src/pricing.dart` con los p
 - Premium: `9.99 USD` mensual y `87.99 USD` anual.
 - Business: `4.99 USD` mensual por perfil y `43.99 USD` anual por perfil.
 
-Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `18`. Ese valor debe ser el mismo tipo de cambio usado al crear o actualizar los Price IDs MXN en Stripe, porque Checkout cobra con Price IDs reales de Stripe y la app solo muestra el estimado visible.
+Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `17.4412366447`. Ese valor debe ser el mismo tipo de cambio usado al crear o actualizar los Price IDs MXN en Stripe, porque Checkout cobra con Price IDs reales de Stripe y la app solo muestra el estimado visible.
 
 ## Trial
 
