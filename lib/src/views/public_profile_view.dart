@@ -58,9 +58,7 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       }
       try {
         final results = await Future.wait<Object>([
-          profileCapabilities.canUseForms
-              ? SmartFormRepository.fetchActiveForms(p.id)
-              : Future<List<SmartFormModel>>.value(const []),
+          SmartFormRepository.fetchPublicActiveForms(p.id),
           profileCapabilities.canUseIntegrations
               ? IntegrationRepository.fetchForProfile(profileId: p.id)
               : Future<List<ProfileIntegrationModel>>.value(const []),
@@ -68,7 +66,7 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         forms = results[0] as List<SmartFormModel>;
         integrations = results[1] as List<ProfileIntegrationModel>;
         final formFields = await Future.wait(
-          forms.map((form) => SmartFormRepository.fetchFields(form.id)),
+          forms.map((form) => SmartFormRepository.fetchPublicFields(form.id)),
         );
         fieldsByFormId = {
           for (var i = 0; i < forms.length; i++) forms[i].id: formFields[i],
@@ -193,6 +191,11 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     }
     final links = p.links.where((link) => link.isVisible).toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final hasStoredIdentity =
+        p.logoUrl?.trim().isNotEmpty == true ||
+        p.coverPhotoUrl?.trim().isNotEmpty == true ||
+        p.theme != null;
+    final canShowPublicForms = capabilities.canUseForms || forms.isNotEmpty;
 
     return Scaffold(
       backgroundColor: TaploeColors.page,
@@ -210,8 +213,9 @@ class _PublicProfileViewState extends State<PublicProfileView> {
                 integrations: integrations,
                 framed: false,
                 allowVerifiedBadge: capabilities.canShowVerifiedBadge,
-                allowCustomDesign: capabilities.canUseDesign,
-                allowForms: capabilities.canUseForms,
+                allowCustomDesign:
+                    capabilities.canUseDesign || hasStoredIdentity,
+                allowForms: canShowPublicForms,
                 allowIntegrations: capabilities.canUseIntegrations,
                 showTaploeWatermark: !capabilities.canRemoveTaploeWatermark,
                 onSaveContact: _saveContact,

@@ -12902,7 +12902,10 @@ class _DesignStudio extends StatelessWidget {
           const SizedBox(height: 14),
           _LogoLayoutControls(
             theme: theme,
-            onChanged: (next) => unawaited(_saveTheme(profile, next)),
+            onPreviewChanged: (next) {
+              taploeState.updateActiveProfile(profile.copyWith(theme: next));
+            },
+            onSave: (next) => _saveTheme(profile, next),
           ),
           if (showVerifiedControl) ...[
             const SizedBox(height: 22),
@@ -13067,14 +13070,75 @@ class _DesignSectionTitle extends StatelessWidget {
   }
 }
 
-class _LogoLayoutControls extends StatelessWidget {
+class _LogoLayoutControls extends StatefulWidget {
   final ProfileThemeModel theme;
-  final ValueChanged<ProfileThemeModel> onChanged;
+  final ValueChanged<ProfileThemeModel> onPreviewChanged;
+  final Future<void> Function(ProfileThemeModel theme) onSave;
 
-  const _LogoLayoutControls({required this.theme, required this.onChanged});
+  const _LogoLayoutControls({
+    required this.theme,
+    required this.onPreviewChanged,
+    required this.onSave,
+  });
+
+  @override
+  State<_LogoLayoutControls> createState() => _LogoLayoutControlsState();
+}
+
+class _LogoLayoutControlsState extends State<_LogoLayoutControls> {
+  late ProfileThemeModel _theme;
+  Timer? _saveDebounce;
+  Object? _lastSaveError;
+
+  @override
+  void initState() {
+    super.initState();
+    _theme = widget.theme;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LogoLayoutControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.theme != widget.theme && _saveDebounce == null) {
+      _theme = widget.theme;
+    }
+  }
+
+  @override
+  void dispose() {
+    final pending = _saveDebounce != null;
+    _saveDebounce?.cancel();
+    if (pending) unawaited(widget.onSave(_theme));
+    super.dispose();
+  }
+
+  void _update(ProfileThemeModel next) {
+    setState(() {
+      _theme = next;
+      _lastSaveError = null;
+    });
+    widget.onPreviewChanged(next);
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 550), () async {
+      _saveDebounce = null;
+      try {
+        await widget.onSave(next);
+      } catch (error) {
+        safePrintError(error);
+        if (!mounted) return;
+        setState(() => _lastSaveError = error);
+        taploeToast(
+          context,
+          'No pudimos guardar el ajuste del logo. Revisa que el SQL de diseño esté aplicado.',
+          error: true,
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = _theme;
     final logoSize = theme.logoSize.clamp(0.7, 1.8).toDouble();
     final offsetRange = _logoOffsetRangeForSize(logoSize);
     final logoOffset = theme.logoVerticalOffset
@@ -13124,7 +13188,7 @@ class _LogoLayoutControls extends StatelessWidget {
                 value,
                 theme.logoVerticalOffset,
               );
-              onChanged(
+              _update(
                 theme
                     .copyWithLogoSize(value)
                     .copyWithLogoVerticalOffset(nextOffset),
@@ -13141,8 +13205,19 @@ class _LogoLayoutControls extends StatelessWidget {
             divisions: offsetDivisions,
             valueLabel: _logoOffsetLabel(logoOffset),
             onChanged: (value) =>
-                onChanged(theme.copyWithLogoVerticalOffset(value)),
+                _update(theme.copyWithLogoVerticalOffset(value)),
           ),
+          if (_lastSaveError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Pendiente de guardar',
+              style: GoogleFonts.dmSans(
+                color: TaploeColors.error,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -15769,8 +15844,8 @@ Future<void> _saveThemeQuick(
 ) async {
   final updated = profile.copyWith(theme: theme);
   taploeState.updateActiveProfile(updated);
-  await ProfileRepository.updateProfile(updated);
-  await taploeState.refreshProfiles();
+  final saved = await ProfileRepository.updateProfile(updated);
+  taploeState.updateActiveProfile(saved);
 }
 
 extension _ProfileThemeQuickCopy on ProfileThemeModel {

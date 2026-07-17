@@ -1150,9 +1150,49 @@ class ProfileRepository {
         .eq('visibility', 'public')
         .maybeSingle();
     if (row == null) return null;
-    return _withOrganizationBranding(
+    return _withPublicOrganizationBranding(
       DigitalProfileModel.fromJson(Map<String, dynamic>.from(row)),
     );
+  }
+
+  static Future<DigitalProfileModel> _withPublicOrganizationBranding(
+    DigitalProfileModel profile,
+  ) async {
+    final orgId = profile.orgId;
+    if (orgId == null || orgId.isEmpty) return profile;
+    try {
+      final raw = await _db.rpc(
+        'public_profile_organization_branding',
+        params: {'p_profile_id': profile.id},
+      );
+      final row = raw is List && raw.isNotEmpty
+          ? Map<String, dynamic>.from(raw.first as Map)
+          : raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : const <String, dynamic>{};
+      final logoUrl = row['company_logo_url']?.toString().trim();
+      final coverPhotoUrl = row['cover_photo_url']?.toString().trim();
+      final enforceTheme = row['enforce_team_profile_theme'] == true;
+      final teamThemeRaw = row['team_profile_theme'];
+      final teamTheme = teamThemeRaw is Map
+          ? ProfileThemeModel.fromJson({
+              'profile_id': profile.id,
+              ...Map<String, dynamic>.from(teamThemeRaw),
+            })
+          : null;
+      return profile.copyWith(
+        logoUrl: logoUrl == null || logoUrl.isEmpty ? profile.logoUrl : logoUrl,
+        coverPhotoUrl:
+            enforceTheme && coverPhotoUrl != null && coverPhotoUrl.isNotEmpty
+            ? coverPhotoUrl
+            : profile.coverPhotoUrl,
+        theme: enforceTheme && teamTheme != null ? teamTheme : profile.theme,
+      );
+    } catch (error) {
+      debugPrint('[TaploeProfiles] No se pudo cargar branding público.');
+      safePrintError(error);
+      return profile;
+    }
   }
 
   static Future<DigitalProfileModel> _withOrganizationBranding(
@@ -2373,6 +2413,18 @@ class LeadRepository {
 }
 
 class SmartFormRepository {
+  static Future<List<SmartFormModel>> fetchPublicActiveForms(
+    String profileId,
+  ) async {
+    final rows = await _db.rpc(
+      'public_profile_forms',
+      params: {'p_profile_id': profileId},
+    );
+    return (rows as List)
+        .map((e) => SmartFormModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
   static Future<List<SmartFormModel>> fetchActiveForms(String profileId) async {
     final rows = await _db
         .from('smart_forms')
@@ -2433,6 +2485,18 @@ class SmartFormRepository {
         .select()
         .eq('form_id', formId)
         .order('sort_order');
+    return (rows as List)
+        .map((e) => SmartFormFieldModel.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<List<SmartFormFieldModel>> fetchPublicFields(
+    String formId,
+  ) async {
+    final rows = await _db.rpc(
+      'public_smart_form_fields',
+      params: {'p_form_id': formId},
+    );
     return (rows as List)
         .map((e) => SmartFormFieldModel.fromJson(Map<String, dynamic>.from(e)))
         .toList();
