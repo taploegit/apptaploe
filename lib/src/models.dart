@@ -6,6 +6,9 @@ DateTime? _dt(dynamic v) =>
 
 int _int(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 
+double _double(dynamic v, {required double fallback}) =>
+    v is num ? v.toDouble() : double.tryParse('$v') ?? fallback;
+
 class AppUserModel {
   final String id;
   final String? authUserId;
@@ -437,6 +440,8 @@ class ProfileThemeModel {
   final String? backgroundImageUrl;
   final String buttonStyle;
   final String fontFamily;
+  final double logoSize;
+  final double logoVerticalOffset;
 
   const ProfileThemeModel({
     this.id,
@@ -452,6 +457,8 @@ class ProfileThemeModel {
     this.backgroundImageUrl,
     this.buttonStyle = 'pill',
     this.fontFamily = 'system',
+    this.logoSize = 1.0,
+    this.logoVerticalOffset = 0.0,
   });
 
   factory ProfileThemeModel.fromJson(Map<String, dynamic> json) =>
@@ -470,6 +477,11 @@ class ProfileThemeModel {
         backgroundImageUrl: json['background_image_url'] as String?,
         buttonStyle: json['button_style'] as String? ?? 'pill',
         fontFamily: json['font_family'] as String? ?? 'system',
+        logoSize: _double(json['logo_size'], fallback: 1.0),
+        logoVerticalOffset: _double(
+          json['logo_vertical_offset'],
+          fallback: 0.0,
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -485,6 +497,8 @@ class ProfileThemeModel {
     'background_image_url': backgroundImageUrl,
     'button_style': buttonStyle,
     'font_family': fontFamily,
+    'logo_size': logoSize,
+    'logo_vertical_offset': logoVerticalOffset,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   };
 }

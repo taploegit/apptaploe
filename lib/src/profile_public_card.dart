@@ -120,6 +120,17 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
     final theme = widget.allowCustomDesign
         ? profile.theme ?? ProfileThemeModel(profileId: profile.id)
         : ProfileThemeModel(profileId: profile.id);
+    final logoSize = theme.logoSize.clamp(0.7, 1.8).toDouble();
+    final logoHeight = (framed ? 44.0 : 52.0) * logoSize;
+    final baseLogoTop = framed ? 52.0 : 56.0;
+    final avatarTop = headerHeight - (avatarRadius * 2);
+    final minLogoTop = framed ? 22.0 : 24.0;
+    final rawMaxLogoTop = avatarTop - logoHeight - (framed ? 10.0 : 14.0);
+    final maxLogoTop = rawMaxLogoTop < minLogoTop ? minLogoTop : rawMaxLogoTop;
+    final logoTop = (baseLogoTop + theme.logoVerticalOffset)
+        .clamp(minLogoTop, maxLogoTop)
+        .toDouble();
+    final logoMaxWidth = phoneWidth * (framed ? 0.56 : 0.62);
     final primaryColor = _colorFromHex(
       theme.primaryColor,
       fallback: TaploeColors.blue,
@@ -225,20 +236,23 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                   ),
           ),
           Positioned(
-            top: framed ? 52 : 56,
+            top: logoTop,
             child: logoUrl == null || logoUrl.isEmpty
                 ? widget.showTaploeWatermark
                       ? TaploeLogo(
-                          size: framed ? 40 : 48,
+                          size: logoHeight,
                           centered: true,
                           color: TaploeColors.black,
                         )
-                      : SizedBox(height: framed ? 44 : 52)
-                : Image.network(
-                    logoUrl,
-                    height: framed ? 44 : 52,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
+                      : SizedBox(height: logoHeight)
+                : ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: logoMaxWidth),
+                    child: Image.network(
+                      logoUrl,
+                      height: logoHeight,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
           ),
           Positioned(

@@ -1147,6 +1147,7 @@ class ProfileRepository {
         .select(_selectFull)
         .eq('public_slug', slug)
         .eq('status', 'active')
+        .eq('visibility', 'public')
         .maybeSingle();
     if (row == null) return null;
     return _withOrganizationBranding(
@@ -1206,6 +1207,37 @@ class ProfileRepository {
     );
   }
 
+  static Future<TaploePlanCapabilities> fetchPublicCapabilitiesForProfile(
+    DigitalProfileModel profile,
+  ) async {
+    try {
+      final raw = await _db.rpc(
+        'public_profile_capabilities',
+        params: {'p_profile_id': profile.id},
+      );
+      final row = raw is List && raw.isNotEmpty
+          ? Map<String, dynamic>.from(raw.first as Map)
+          : raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : const <String, dynamic>{};
+      final hasPremium =
+          row['has_premium_features'] == true ||
+          row['can_use_design'] == true ||
+          row['can_use_forms'] == true ||
+          row['can_use_integrations'] == true ||
+          row['can_remove_taploe_watermark'] == true;
+      return TaploePlanCapabilities(
+        hasPremium ? TaploePlan.pro : TaploePlan.free,
+      );
+    } catch (error) {
+      debugPrint(
+        '[TaploeProfiles] No se pudieron cargar capacidades públicas.',
+      );
+      safePrintError(error);
+      return const TaploePlanCapabilities(TaploePlan.free);
+    }
+  }
+
   static ProfileThemeModel _themeForProfile(
     ProfileThemeModel theme,
     String profileId,
@@ -1223,6 +1255,8 @@ class ProfileRepository {
     backgroundImageUrl: theme.backgroundImageUrl,
     buttonStyle: theme.buttonStyle,
     fontFamily: theme.fontFamily,
+    logoSize: theme.logoSize,
+    logoVerticalOffset: theme.logoVerticalOffset,
   );
 
   static Future<DigitalProfileModel> createProfileForUser(

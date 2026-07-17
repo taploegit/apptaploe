@@ -12899,6 +12899,11 @@ class _DesignStudio extends StatelessWidget {
                 wide: true,
               ),
             ),
+          const SizedBox(height: 14),
+          _LogoLayoutControls(
+            theme: theme,
+            onChanged: (next) => unawaited(_saveTheme(profile, next)),
+          ),
           if (showVerifiedControl) ...[
             const SizedBox(height: 22),
             _VerifiedBadgeToggleCard(
@@ -13060,6 +13065,180 @@ class _DesignSectionTitle extends StatelessWidget {
       ],
     );
   }
+}
+
+class _LogoLayoutControls extends StatelessWidget {
+  final ProfileThemeModel theme;
+  final ValueChanged<ProfileThemeModel> onChanged;
+
+  const _LogoLayoutControls({required this.theme, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final logoSize = theme.logoSize.clamp(0.7, 1.8).toDouble();
+    final offsetRange = _logoOffsetRangeForSize(logoSize);
+    final logoOffset = theme.logoVerticalOffset
+        .clamp(offsetRange.$1, offsetRange.$2)
+        .toDouble();
+    final offsetSpan = (offsetRange.$2 - offsetRange.$1).abs();
+    final offsetDivisions = math.max(1, (offsetSpan / 4).round());
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.tune_rounded,
+                color: TaploeColors.blue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Ajuste del logo',
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _LogoSlider(
+            icon: Icons.photo_size_select_large_rounded,
+            label: 'Tamaño',
+            value: logoSize,
+            min: 0.7,
+            max: 1.8,
+            divisions: 11,
+            valueLabel: '${(logoSize * 100).round()}%',
+            onChanged: (value) {
+              final nextOffset = _clampLogoOffsetForSize(
+                value,
+                theme.logoVerticalOffset,
+              );
+              onChanged(
+                theme
+                    .copyWithLogoSize(value)
+                    .copyWithLogoVerticalOffset(nextOffset),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _LogoSlider(
+            icon: Icons.swap_vert_rounded,
+            label: 'Posición',
+            value: logoOffset,
+            min: offsetRange.$1,
+            max: offsetRange.$2,
+            divisions: offsetDivisions,
+            valueLabel: _logoOffsetLabel(logoOffset),
+            onChanged: (value) =>
+                onChanged(theme.copyWithLogoVerticalOffset(value)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LogoSlider extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String valueLabel;
+  final ValueChanged<double> onChanged;
+
+  const _LogoSlider({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.valueLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: context.muted, size: 20),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 86,
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: context.text,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            activeColor: TaploeColors.blue,
+            inactiveColor: TaploeColors.border,
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 92,
+          child: Text(
+            valueLabel,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.dmSans(
+              color: context.muted,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+const double _logoEditorBaseTop = 52;
+const double _logoEditorAvatarTop = 122;
+const double _logoEditorMinTop = 22;
+const double _logoEditorAvatarGap = 10;
+const double _logoEditorBaseHeight = 44;
+
+(double, double) _logoOffsetRangeForSize(double logoSize) {
+  final logoHeight = _logoEditorBaseHeight * logoSize.clamp(0.7, 1.8);
+  final minOffset = _logoEditorMinTop - _logoEditorBaseTop;
+  final maxTop = _logoEditorAvatarTop - logoHeight - _logoEditorAvatarGap;
+  final maxOffset = math.max(minOffset, maxTop - _logoEditorBaseTop);
+  return (minOffset, maxOffset);
+}
+
+double _clampLogoOffsetForSize(double logoSize, double offset) {
+  final range = _logoOffsetRangeForSize(logoSize);
+  return offset.clamp(range.$1, range.$2).toDouble();
+}
+
+String _logoOffsetLabel(double value) {
+  final rounded = value.round();
+  if (rounded == 0) return 'Centro';
+  if (rounded < 0) return '${rounded.abs()} px arriba';
+  return '$rounded px abajo';
 }
 
 class _DesignPresetCard extends StatelessWidget {
@@ -13321,6 +13500,8 @@ class _DesignPreset {
     backgroundImageUrl: current.backgroundImageUrl,
     buttonStyle: buttonStyle,
     fontFamily: fontFamily,
+    logoSize: current.logoSize,
+    logoVerticalOffset: current.logoVerticalOffset,
   );
 }
 
@@ -15607,6 +15788,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
     backgroundImageUrl: backgroundImageUrl,
     buttonStyle: value,
     fontFamily: fontFamily,
+    logoSize: logoSize,
+    logoVerticalOffset: logoVerticalOffset,
   );
 
   ProfileThemeModel copyWithPrimary(String value) => ProfileThemeModel(
@@ -15623,6 +15806,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
     backgroundImageUrl: backgroundImageUrl,
     buttonStyle: buttonStyle,
     fontFamily: fontFamily,
+    logoSize: logoSize,
+    logoVerticalOffset: logoVerticalOffset,
   );
 
   ProfileThemeModel copyWithAccent(String value) => ProfileThemeModel(
@@ -15639,6 +15824,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
     backgroundImageUrl: backgroundImageUrl,
     buttonStyle: buttonStyle,
     fontFamily: fontFamily,
+    logoSize: logoSize,
+    logoVerticalOffset: logoVerticalOffset,
   );
 
   ProfileThemeModel copyWithBackgroundMode(String value) {
@@ -15657,6 +15844,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
         backgroundImageUrl: null,
         buttonStyle: buttonStyle,
         fontFamily: fontFamily,
+        logoSize: logoSize,
+        logoVerticalOffset: logoVerticalOffset,
       );
     }
     if (value == 'custom') {
@@ -15674,6 +15863,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
         backgroundImageUrl: backgroundImageUrl,
         buttonStyle: buttonStyle,
         fontFamily: fontFamily,
+        logoSize: logoSize,
+        logoVerticalOffset: logoVerticalOffset,
       );
     }
     return ProfileThemeModel(
@@ -15690,6 +15881,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
       backgroundImageUrl: null,
       buttonStyle: buttonStyle,
       fontFamily: fontFamily,
+      logoSize: logoSize,
+      logoVerticalOffset: logoVerticalOffset,
     );
   }
 
@@ -15714,6 +15907,8 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
       backgroundImageUrl: null,
       buttonStyle: buttonStyle,
       fontFamily: fontFamily,
+      logoSize: logoSize,
+      logoVerticalOffset: logoVerticalOffset,
     );
   }
 
@@ -15731,7 +15926,46 @@ extension _ProfileThemeQuickCopy on ProfileThemeModel {
     backgroundImageUrl: backgroundImageUrl,
     buttonStyle: buttonStyle,
     fontFamily: value,
+    logoSize: logoSize,
+    logoVerticalOffset: logoVerticalOffset,
   );
+
+  ProfileThemeModel copyWithLogoSize(double value) => ProfileThemeModel(
+    id: id,
+    profileId: profileId,
+    themeStyle: themeStyle,
+    layoutStyle: layoutStyle,
+    primaryColor: primaryColor,
+    secondaryColor: secondaryColor,
+    accentColor: accentColor,
+    backgroundType: backgroundType,
+    backgroundColorStart: backgroundColorStart,
+    backgroundColorEnd: backgroundColorEnd,
+    backgroundImageUrl: backgroundImageUrl,
+    buttonStyle: buttonStyle,
+    fontFamily: fontFamily,
+    logoSize: value,
+    logoVerticalOffset: logoVerticalOffset,
+  );
+
+  ProfileThemeModel copyWithLogoVerticalOffset(double value) =>
+      ProfileThemeModel(
+        id: id,
+        profileId: profileId,
+        themeStyle: themeStyle,
+        layoutStyle: layoutStyle,
+        primaryColor: primaryColor,
+        secondaryColor: secondaryColor,
+        accentColor: accentColor,
+        backgroundType: backgroundType,
+        backgroundColorStart: backgroundColorStart,
+        backgroundColorEnd: backgroundColorEnd,
+        backgroundImageUrl: backgroundImageUrl,
+        buttonStyle: buttonStyle,
+        fontFamily: fontFamily,
+        logoSize: logoSize,
+        logoVerticalOffset: value,
+      );
 }
 
 Future<void> _showVcardDialog(
