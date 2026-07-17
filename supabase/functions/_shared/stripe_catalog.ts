@@ -13,8 +13,8 @@ export const stripeCatalog = {
         annual: "STRIPE_PREMIUM_ANNUAL_PRICE_ID",
       },
       mx: {
-        monthly: "STRIPE_PREMIUM_MONTHLY_PRICE_ID_MXN",
-        annual: "STRIPE_PREMIUM_ANNUAL_PRICE_ID_MXN",
+        monthly: "STRIPE_PREMIUM_MONTHLY_PRICE_ID",
+        annual: "STRIPE_PREMIUM_ANNUAL_PRICE_ID",
       },
     },
   },
@@ -26,8 +26,8 @@ export const stripeCatalog = {
         annual: "STRIPE_BUSINESS_ANNUAL_PRICE_ID",
       },
       mx: {
-        monthly: "STRIPE_BUSINESS_MONTHLY_PRICE_ID_MXN",
-        annual: "STRIPE_BUSINESS_ANNUAL_PRICE_ID_MXN",
+        monthly: "STRIPE_BUSINESS_MONTHLY_PRICE_ID",
+        annual: "STRIPE_BUSINESS_ANNUAL_PRICE_ID",
       },
     },
   },
