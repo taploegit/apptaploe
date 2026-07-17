@@ -57,16 +57,16 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         safePrintError(error);
       }
       try {
-        final results = await Future.wait<Object>([
-          SmartFormRepository.fetchPublicActiveForms(p.id),
-          profileCapabilities.canUseIntegrations
-              ? IntegrationRepository.fetchForProfile(profileId: p.id)
-              : Future<List<ProfileIntegrationModel>>.value(const []),
-        ]);
-        forms = results[0] as List<SmartFormModel>;
-        integrations = results[1] as List<ProfileIntegrationModel>;
+        forms = await SmartFormRepository.fetchPublicActiveForms(p.id);
         final formFields = await Future.wait(
-          forms.map((form) => SmartFormRepository.fetchPublicFields(form.id)),
+          forms.map((form) async {
+            try {
+              return await SmartFormRepository.fetchPublicFields(form.id);
+            } catch (error) {
+              safePrintError(error);
+              return <SmartFormFieldModel>[];
+            }
+          }),
         );
         fieldsByFormId = {
           for (var i = 0; i < forms.length; i++) forms[i].id: formFields[i],
@@ -74,8 +74,19 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       } catch (error) {
         safePrintError(error);
         forms = const [];
-        integrations = const [];
         fieldsByFormId = {};
+      }
+      if (profileCapabilities.canUseIntegrations) {
+        try {
+          integrations = await IntegrationRepository.fetchForProfile(
+            profileId: p.id,
+          );
+        } catch (error) {
+          safePrintError(error);
+          integrations = const [];
+        }
+      } else {
+        integrations = const [];
       }
       capabilities = profileCapabilities;
       if (channel == null && !loggedDirectView) {
