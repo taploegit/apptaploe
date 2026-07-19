@@ -296,13 +296,12 @@ serve(async (req) => {
       : "Tu suscripcion se renovara automaticamente hasta que la canceles.";
 
     const stripe = stripeClient();
-    const checkoutCurrency = parsed.market === "mx" ? "mxn" : "usd";
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: appUser.id,
-      currency: checkoutCurrency,
       line_items: [lineItem],
+      adaptive_pricing: { enabled: false },
       payment_method_collection: "always",
       locale: parsed.language === "es" ? "es-419" : "en",
       success_url: `${appUrl()}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,

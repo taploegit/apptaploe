@@ -82,7 +82,7 @@ La app muestra precios desde el catálogo local `lib/src/pricing.dart` con los p
 - Premium: `9.99 USD` mensual y `87.99 USD` anual.
 - Business: `4.99 USD` mensual por perfil y `43.99 USD` anual por perfil.
 
-Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `17.4412366447`. La Edge Function usa el mismo tipo de cambio para construir `price_data` recurrente en MXN antes de enviar a Stripe, así Checkout muestra y cobra el mismo importe que la plataforma. Para Estados Unidos, Checkout usa los Price IDs USD configurados en Stripe.
+Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `17.4412366447`. La Edge Function usa el mismo tipo de cambio para construir `price_data` recurrente en MXN antes de enviar a Stripe, así Checkout muestra y cobra el mismo importe que la plataforma. Para Estados Unidos, Checkout usa los Price IDs USD configurados en Stripe. La sesión desactiva `adaptive_pricing` porque Taploe decide la moneda desde `locale/market`; Stripe no debe cambiarla por IP, navegador o heurística regional.
 
 ## Trial
 
