@@ -9,7 +9,10 @@ import {
   requireAuthenticatedAppUser,
 } from "../_shared/supabase.ts";
 import {
+  convertedMxnUnitAmount,
   stripePriceId,
+  stripeProductIdOrNull,
+  stripeProductName,
   TaploeBillingPeriod,
   TaploeCheckoutPlan,
 } from "../_shared/stripe_catalog.ts";
@@ -76,9 +79,22 @@ function validateBody(body: CheckoutBody): {
     throw Object.assign(new Error("BUSINESS_QUANTITY_OUT_OF_RANGE"), { status: 400 });
   }
   const rawLocale = typeof body.locale === "string"
-    ? body.locale.toLowerCase()
+    ? body.locale.trim().toLowerCase()
     : "";
-  const market = body.market === "us" || rawLocale === "en-us" ? "us" : "mx";
+  const rawLanguage = typeof body.language === "string"
+    ? body.language.trim().toLowerCase()
+    : "";
+  const market =
+    body.market === "mx" ||
+      rawLocale === "es-mx" ||
+      rawLocale === "es_mx" ||
+      rawLocale === "mx" ||
+      rawLanguage === "es"
+      ? "mx"
+      : body.market === "us" || rawLocale === "en-us" ||
+          rawLocale === "en_us" || rawLocale === "us"
+      ? "us"
+      : "mx";
   const language = body.language === "en" || market === "us" ? "en" : "es";
   return {
     plan: body.plan,
@@ -240,11 +256,24 @@ serve(async (req) => {
       quantity: parsed.quantity.toString(),
       source: "taploe_app",
     };
-    const selectedPriceId = stripePriceId(
-      parsed.plan,
-      parsed.market,
-      parsed.billingPeriod,
-    );
+    const recurringInterval = parsed.billingPeriod === "annual" ? "year" : "month";
+    const productId = stripeProductIdOrNull(parsed.plan);
+    const lineItem = parsed.market === "mx"
+      ? {
+        price_data: {
+          currency: "mxn",
+          ...(productId
+            ? { product: productId }
+            : { product_data: { name: stripeProductName(parsed.plan) } }),
+          unit_amount: convertedMxnUnitAmount(parsed.plan, parsed.billingPeriod),
+          recurring: { interval: recurringInterval },
+        },
+        quantity: parsed.quantity,
+      }
+      : {
+        price: stripePriceId(parsed.plan, parsed.market, parsed.billingPeriod),
+        quantity: parsed.quantity,
+      };
     const trialText = parsed.language === "en"
       ? "Free for 7 days. Cancel before your first charge."
       : "Prueba gratis durante 7 dias. Puedes cancelar antes del primer cobro.";
@@ -257,7 +286,7 @@ serve(async (req) => {
       mode: "subscription",
       customer: customerId,
       client_reference_id: appUser.id,
-      line_items: [{ price: selectedPriceId, quantity: parsed.quantity }],
+      line_items: [lineItem],
       payment_method_collection: "always",
       locale: parsed.language === "es" ? "es-419" : "en",
       success_url: `${appUrl()}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,

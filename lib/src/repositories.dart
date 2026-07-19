@@ -702,6 +702,17 @@ class BillingRepository {
     if (data is Map && data['checkoutUrl'] is String) {
       return data['checkoutUrl'] as String;
     }
+    if (data is Map) {
+      final message = data['message']?.toString();
+      final code = data['code']?.toString();
+      throw StateError(
+        message?.trim().isNotEmpty == true
+            ? message!
+            : code?.trim().isNotEmpty == true
+            ? code!
+            : 'checkout_url_missing',
+      );
+    }
     throw StateError('checkout_url_missing');
   }
 

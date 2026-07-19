@@ -39,9 +39,13 @@ STRIPE_WEBHOOK_SECRET
 STRIPE_PREMIUM_PRODUCT_ID
 STRIPE_PREMIUM_MONTHLY_PRICE_ID
 STRIPE_PREMIUM_ANNUAL_PRICE_ID
+STRIPE_PREMIUM_MONTHLY_PRICE_ID_MXN
+STRIPE_PREMIUM_ANNUAL_PRICE_ID_MXN
 STRIPE_BUSINESS_PRODUCT_ID
 STRIPE_BUSINESS_MONTHLY_PRICE_ID
 STRIPE_BUSINESS_ANNUAL_PRICE_ID
+STRIPE_BUSINESS_MONTHLY_PRICE_ID_MXN
+STRIPE_BUSINESS_ANNUAL_PRICE_ID_MXN
 APP_URL
 STRIPE_ENV
 TAPLOE_USD_MXN_RATE
@@ -78,7 +82,7 @@ La app muestra precios desde el catálogo local `lib/src/pricing.dart` con los p
 - Premium: `9.99 USD` mensual y `87.99 USD` anual.
 - Business: `4.99 USD` mensual por perfil y `43.99 USD` anual por perfil.
 
-Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `17.4412366447`. Stripe Checkout usa los mismos Price IDs base; la conversión a MXN depende de la configuración regional/multimoneda de Stripe aplicada a esos precios.
+Para México, Flutter convierte esos importes con `TAPLOE_USD_MXN_RATE` y default `17.4412366447`. La Edge Function usa el mismo tipo de cambio para construir `price_data` recurrente en MXN antes de enviar a Stripe, así Checkout muestra y cobra el mismo importe que la plataforma. Para Estados Unidos, Checkout usa los Price IDs USD configurados en Stripe.
 
 ## Trial
 
@@ -95,7 +99,7 @@ https://app.taploe.com/login?locale=en-US
 
 `es-MX` significa textos en español y precios/cobros en MXN. `en-US` significa textos en inglés y precios/cobros en USD. La preferencia se guarda en `app_users.preferred_language`, `app_users.preferred_market` y se propaga a `digital_profiles.public_locale` para que el perfil público use el idioma configurado por el dueño.
 
-Para México, Flutter debe mandar `market: "mx"` y `locale: "es-MX"` al crear Checkout. Stripe muestra/cobra en MXN con la configuración regional/multimoneda de los Price IDs existentes, igual que en Taploe Business.
+Para México, Flutter debe mandar `market: "mx"` y `locale: "es-MX"` al crear Checkout. Si la petición llega con idioma `es`, locale `es-MX` o mercado `mx`, la función fuerza MXN. Si llega como `en-US`/`us`, usa USD.
 
 ## Webhooks
 
