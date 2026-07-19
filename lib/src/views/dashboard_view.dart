@@ -3572,9 +3572,12 @@ class _EntryDialogCheckoutContentState
       if (mounted) {
         taploeToast(
           context,
-          taploeState.t.text(
-            'No pudimos iniciar Checkout. Si ya tienes una suscripción, adminístrala desde Facturación.',
-            'We could not start Checkout. If you already have a subscription, manage it from Billing.',
+          safeCheckoutErrorMessage(
+            error,
+            fallback: taploeState.t.text(
+              'No pudimos iniciar Checkout. Intenta de nuevo.',
+              'We could not start Checkout. Try again.',
+            ),
           ),
           error: true,
         );

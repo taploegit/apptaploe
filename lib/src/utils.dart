@@ -37,6 +37,59 @@ void safePrintError(Object error) {
   if (kDebugMode) debugPrint(error.toString());
 }
 
+String safeCheckoutErrorMessage(Object? error, {required String fallback}) {
+  final rawError = error?.toString() ?? '';
+  String? detailMessage;
+  String? detailCode;
+  final detailPattern = RegExp(r'details:\s*(\{.*\}),\s*reasonPhrase:');
+  final detailMatch = detailPattern.firstMatch(rawError);
+  final detailText = detailMatch?.group(1) ?? '';
+  if (detailText.isNotEmpty) {
+    detailMessage = RegExp(
+      r'message:\s*([^,}]+)',
+    ).firstMatch(detailText)?.group(1)?.trim();
+    detailCode = RegExp(
+      r'code:\s*([^,}]+)',
+    ).firstMatch(detailText)?.group(1)?.trim();
+  }
+  final raw = [
+    detailCode,
+    detailMessage,
+    rawError
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('FunctionException: ', ''),
+  ].whereType<String>().join(' ').trim();
+  final normalized = raw.toLowerCase();
+
+  if (normalized.contains('subscription_already_exists') ||
+      normalized.contains('suscripcion activa') ||
+      normalized.contains('suscripción activa')) {
+    return 'Ya tienes una suscripción activa. Adminístrala desde Facturación.';
+  }
+  if (normalized.contains('jwt') ||
+      normalized.contains('auth') ||
+      normalized.contains('unauthorized') ||
+      normalized.contains('401')) {
+    return 'Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.';
+  }
+  if (normalized.contains('configuracion incompleta') ||
+      normalized.contains('configuración incompleta') ||
+      normalized.contains('missing required environment variable')) {
+    return 'Falta configuración de Stripe en el servidor. Revisa los secrets de Supabase.';
+  }
+  if (normalized.contains('invalid_plan') ||
+      normalized.contains('invalid_billing_period') ||
+      normalized.contains('invalid_quantity')) {
+    return 'El plan seleccionado no es válido. Recarga la página e intenta de nuevo.';
+  }
+  if (detailMessage != null && detailMessage.trim().isNotEmpty) {
+    return detailMessage.trim();
+  }
+  return fallback;
+}
+
 String safeAuthErrorMessage(
   Object? error, {
   String fallback = 'No se pudo completar el acceso. Intenta de nuevo.',

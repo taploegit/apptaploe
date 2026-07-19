@@ -196,17 +196,31 @@ async function ensureStripeCustomer(
   return customer.id;
 }
 
+function subscriptionStillBlocksCheckout(row: {
+  status: string;
+  current_period_end: string | null;
+  grace_until: string | null;
+  trial_end: string | null;
+}): boolean {
+  if (!activeStatuses.includes(row.status)) return false;
+  const boundary = row.grace_until ?? row.current_period_end ?? row.trial_end;
+  if (!boundary) return true;
+  const expiresAt = Date.parse(boundary);
+  return Number.isFinite(expiresAt) && expiresAt >= Date.now();
+}
+
 async function hasActiveSubscription(scope: "user" | "organization", userId: string, orgId: string | null) {
   const query = adminClient()
     .from("billing_subscriptions")
-    .select("id,status")
+    .select("id,status,current_period_end,grace_until,trial_end")
     .eq("scope", scope)
     .in("status", activeStatuses)
-    .limit(1);
+    .order("created_at", { ascending: false })
+    .limit(10);
   const { data } = scope === "organization"
     ? await query.eq("org_id", orgId)
     : await query.eq("user_id", userId);
-  return (data ?? []).length > 0;
+  return (data ?? []).some(subscriptionStillBlocksCheckout);
 }
 
 async function trialAvailable(ownerUserId: string, stripeCustomerId: string): Promise<boolean> {
