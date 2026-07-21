@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -49,81 +51,107 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       safePrintError(error);
     }
     if (p != null) {
-      var profileCapabilities = const TaploePlanCapabilities(TaploePlan.free);
-      try {
-        profileCapabilities =
-            await ProfileRepository.fetchPublicCapabilitiesForProfile(p);
-      } catch (error) {
-        safePrintError(error);
-      }
-      try {
-        forms = await SmartFormRepository.fetchPublicActiveForms(p.id);
-        final formFields = await Future.wait(
-          forms.map((form) async {
-            try {
-              return await SmartFormRepository.fetchPublicFields(form.id);
-            } catch (error) {
-              safePrintError(error);
-              return <SmartFormFieldModel>[];
-            }
-          }),
-        );
-        fieldsByFormId = {
-          for (var i = 0; i < forms.length; i++) forms[i].id: formFields[i],
-        };
-      } catch (error) {
-        safePrintError(error);
-        forms = const [];
-        fieldsByFormId = {};
-      }
-      if (profileCapabilities.canUseIntegrations) {
-        try {
-          integrations = await IntegrationRepository.fetchForProfile(
-            profileId: p.id,
-          );
-        } catch (error) {
-          safePrintError(error);
-          integrations = const [];
-        }
-      } else {
-        integrations = const [];
-      }
-      capabilities = profileCapabilities;
-      if (channel == null && !loggedDirectView) {
-        loggedDirectView = true;
-        await SessionStorage.saveVisitorAttribution(
-          accessPointId: 'direct',
-          channel: 'direct',
-          profileId: p.id,
-        );
-        try {
-          await AnalyticsRepository.insertEvent(
-            profileId: p.id,
-            eventType: 'profile_view',
-            channel: 'direct',
-          );
-        } catch (error) {
-          safePrintError(error);
-        }
-      }
+      if (!mounted) return;
+      setState(() {
+        profile = p;
+        loading = false;
+      });
+      unawaited(_loadSecondaryProfileData(p));
+      unawaited(_logDirectProfileView(p.id));
+      return;
     }
     if (!mounted) return;
     setState(() {
-      profile = p;
+      profile = null;
       loading = false;
     });
+  }
+
+  Future<void> _loadSecondaryProfileData(DigitalProfileModel p) async {
+    var profileCapabilities = const TaploePlanCapabilities(TaploePlan.free);
+    var nextForms = <SmartFormModel>[];
+    var nextFieldsByFormId = <String, List<SmartFormFieldModel>>{};
+    var nextIntegrations = <ProfileIntegrationModel>[];
+
+    try {
+      profileCapabilities =
+          await ProfileRepository.fetchPublicCapabilitiesForProfile(p);
+    } catch (error) {
+      safePrintError(error);
+    }
+
+    try {
+      nextForms = await SmartFormRepository.fetchPublicActiveForms(p.id);
+      final formFields = await Future.wait(
+        nextForms.map((form) async {
+          try {
+            return await SmartFormRepository.fetchPublicFields(form.id);
+          } catch (error) {
+            safePrintError(error);
+            return <SmartFormFieldModel>[];
+          }
+        }),
+      );
+      nextFieldsByFormId = {
+        for (var i = 0; i < nextForms.length; i++)
+          nextForms[i].id: formFields[i],
+      };
+    } catch (error) {
+      safePrintError(error);
+    }
+
+    if (profileCapabilities.canUseIntegrations) {
+      try {
+        nextIntegrations = await IntegrationRepository.fetchForProfile(
+          profileId: p.id,
+        );
+      } catch (error) {
+        safePrintError(error);
+      }
+    }
+
+    if (!mounted || profile?.id != p.id) return;
+    setState(() {
+      capabilities = profileCapabilities;
+      forms = nextForms;
+      fieldsByFormId = nextFieldsByFormId;
+      integrations = nextIntegrations;
+    });
+  }
+
+  Future<void> _logDirectProfileView(String profileId) async {
+    if (channel != null || loggedDirectView) return;
+    loggedDirectView = true;
+    await SessionStorage.saveVisitorAttribution(
+      accessPointId: 'direct',
+      channel: 'direct',
+      profileId: profileId,
+    );
+    try {
+      await AnalyticsRepository.insertEvent(
+        profileId: profileId,
+        eventType: 'profile_view',
+        channel: 'direct',
+      );
+    } catch (error) {
+      safePrintError(error);
+    }
   }
 
   Future<void> _openLink(ProfileLinkModel link) async {
     final p = profile;
     if (p == null) return;
-    await AnalyticsRepository.insertEvent(
-      profileId: p.id,
-      accessPointId: accessPointId,
-      linkId: link.id,
-      eventType: link.linkType == 'calendar' ? 'calendar_click' : 'link_click',
-      channel: channel ?? 'direct',
-      metadata: {'label': link.label, 'type': link.linkType},
+    unawaited(
+      AnalyticsRepository.insertEvent(
+        profileId: p.id,
+        accessPointId: accessPointId,
+        linkId: link.id,
+        eventType: link.linkType == 'calendar'
+            ? 'calendar_click'
+            : 'link_click',
+        channel: channel ?? 'direct',
+        metadata: {'label': link.label, 'type': link.linkType},
+      ).catchError(safePrintError),
     );
     final raw = link.url ?? link.value;
     final uri = raw == null ? null : Uri.tryParse(raw);
@@ -138,18 +166,20 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     final raw = integration.integration?.publicUrl;
     final uri = raw == null ? null : Uri.tryParse(raw);
     if (uri == null) return;
-    await AnalyticsRepository.insertEvent(
-      profileId: p.id,
-      accessPointId: accessPointId,
-      eventType: integration.integration?.integrationType == 'calendar'
-          ? 'calendar_click'
-          : 'integration_click',
-      channel: channel ?? 'direct',
-      metadata: {
-        'label': integration.displayLabel,
-        'provider': integration.integration?.provider,
-        'type': integration.integration?.integrationType,
-      },
+    unawaited(
+      AnalyticsRepository.insertEvent(
+        profileId: p.id,
+        accessPointId: accessPointId,
+        eventType: integration.integration?.integrationType == 'calendar'
+            ? 'calendar_click'
+            : 'integration_click',
+        channel: channel ?? 'direct',
+        metadata: {
+          'label': integration.displayLabel,
+          'provider': integration.integration?.provider,
+          'type': integration.integration?.integrationType,
+        },
+      ).catchError(safePrintError),
     );
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -162,11 +192,13 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       profilePhotoUrl: p.profilePhotoUrl,
     );
     await Clipboard.setData(ClipboardData(text: vcf));
-    await AnalyticsRepository.insertEvent(
-      profileId: p.id,
-      accessPointId: accessPointId,
-      eventType: 'contact_save',
-      channel: channel ?? 'direct',
+    unawaited(
+      AnalyticsRepository.insertEvent(
+        profileId: p.id,
+        accessPointId: accessPointId,
+        eventType: 'contact_save',
+        channel: channel ?? 'direct',
+      ).catchError(safePrintError),
     );
     final t = TaploeTextCatalog(
       TaploeLocaleConfig.fromLocaleParam(p.publicLocale),

@@ -229,10 +229,15 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                       ),
                     ),
                   )
-                : Image.network(
-                    coverUrl,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
+                : _NetworkCoverImage(
+                    url: coverUrl,
+                    placeholder: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [backgroundStart, backgroundEnd],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
                   ),
           ),
           Positioned(
@@ -247,12 +252,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
                       : SizedBox(height: logoHeight)
                 : ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: logoMaxWidth),
-                    child: Image.network(
-                      logoUrl,
-                      height: logoHeight,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                    ),
+                    child: _NetworkLogoImage(logoUrl, height: logoHeight),
                   ),
           ),
           Positioned(
@@ -613,6 +613,48 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NetworkCoverImage extends StatelessWidget {
+  final String url;
+  final BoxDecoration placeholder;
+
+  const _NetworkCoverImage({required this.url, required this.placeholder});
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = DecoratedBox(decoration: placeholder);
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.medium,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : fallback,
+      errorBuilder: (context, error, stackTrace) => fallback,
+    );
+  }
+}
+
+class _NetworkLogoImage extends StatelessWidget {
+  final String url;
+  final double height;
+
+  const _NetworkLogoImage(this.url, {required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      url,
+      height: height,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.medium,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : SizedBox(height: height),
+      errorBuilder: (context, error, stackTrace) => SizedBox(height: height),
     );
   }
 }

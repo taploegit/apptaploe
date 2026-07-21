@@ -1,8 +1,3 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
-
-import 'dart:async';
-import 'dart:html' as html;
-
 class DeviceLocationSnapshot {
   final double? latitude;
   final double? longitude;
@@ -39,23 +34,6 @@ class DeviceLocationSnapshot {
 
 class DeviceLocationService {
   static Future<DeviceLocationSnapshot?> snapshot() async {
-    try {
-      final geolocation = html.window.navigator.geolocation;
-      final position = await geolocation
-          .getCurrentPosition(
-            enableHighAccuracy: false,
-            timeout: const Duration(milliseconds: 1800),
-            maximumAge: const Duration(minutes: 10),
-          )
-          .timeout(const Duration(milliseconds: 2200));
-      final coords = position.coords;
-      return DeviceLocationSnapshot(
-        latitude: coords?.latitude?.toDouble(),
-        longitude: coords?.longitude?.toDouble(),
-        accuracy: coords?.accuracy?.toDouble(),
-      );
-    } catch (_) {
-      return null;
-    }
+    return null;
   }
 }
