@@ -24097,6 +24097,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _fill() {
+    if (saving) return;
     final user = taploeState.currentUser;
     if (user == null) return;
     if (name.text == user.username &&
@@ -24114,6 +24115,7 @@ class _SettingsViewState extends State<SettingsView> {
   Future<void> save() async {
     final user = taploeState.currentUser;
     if (user == null) return;
+    final localeToSave = selectedLocale;
 
     final requestedUsername = UserRepository.normalizeUsername(name.text);
     if (requestedUsername.length < 3) {
@@ -24182,16 +24184,16 @@ class _SettingsViewState extends State<SettingsView> {
         username: requestedUsername,
         phone: phone.text,
         timezone: timezone.text,
-        preferredLanguage: selectedLocale.languageCode,
-        preferredMarket: selectedLocale.marketCode,
+        preferredLanguage: localeToSave.languageCode,
+        preferredMarket: localeToSave.marketCode,
       );
       taploeState.updateCurrentUser(updatedUser);
-      await taploeState.updateLocale(selectedLocale);
+      await taploeState.updateLocale(localeToSave);
 
       if (profile != null && usernameChanged) {
         final updatedProfile = profile.copyWith(
           publicSlug: requestedUsername,
-          publicLocale: selectedLocale.localeCode,
+          publicLocale: localeToSave.localeCode,
         );
         taploeState.updateActiveProfile(updatedProfile);
         await ProfileRepository.updateProfile(updatedProfile);
