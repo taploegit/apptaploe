@@ -12,6 +12,7 @@ import '../repositories.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../utils.dart';
+import '../vcard_launcher.dart';
 import '../widgets.dart';
 
 class PublicProfileView extends StatefulWidget {
@@ -141,6 +142,15 @@ class _PublicProfileViewState extends State<PublicProfileView> {
   Future<void> _openLink(ProfileLinkModel link) async {
     final p = profile;
     if (p == null) return;
+    final uri = _uriForProfileLink(link);
+    if (uri == null) {
+      taploeToast(
+        context,
+        'Este enlace no tiene información válida.',
+        error: true,
+      );
+      return;
+    }
     unawaited(
       AnalyticsRepository.insertEvent(
         profileId: p.id,
@@ -153,10 +163,9 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         metadata: {'label': link.label, 'type': link.linkType},
       ).catchError(safePrintError),
     );
-    final raw = link.url ?? link.value;
-    final uri = raw == null ? null : Uri.tryParse(raw);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!await _launchProfileUri(uri)) {
+      if (!mounted) return;
+      taploeToast(context, 'No se pudo abrir este enlace.', error: true);
     }
   }
 
@@ -181,7 +190,10 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         },
       ).catchError(safePrintError),
     );
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!await _launchProfileUri(uri)) {
+      if (!mounted) return;
+      taploeToast(context, 'No se pudo abrir esta integración.', error: true);
+    }
   }
 
   Future<void> _saveContact() async {
@@ -191,7 +203,6 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       displayName: p.displayName,
       profilePhotoUrl: p.profilePhotoUrl,
     );
-    await Clipboard.setData(ClipboardData(text: vcf));
     unawaited(
       AnalyticsRepository.insertEvent(
         profileId: p.id,
@@ -200,10 +211,18 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         channel: channel ?? 'direct',
       ).catchError(safePrintError),
     );
+    final opened = await openVcardFile(
+      contents: vcf,
+      displayName: p.displayName,
+    );
     final t = TaploeTextCatalog(
       TaploeLocaleConfig.fromLocaleParam(p.publicLocale),
     );
-    if (mounted) taploeToast(context, t.vcardCopied);
+    if (opened) return;
+    await Clipboard.setData(ClipboardData(text: vcf));
+    if (mounted) {
+      taploeToast(context, '${t.vcardCopied} No se pudo abrir el archivo.');
+    }
   }
 
   Future<void> _shareProfile() async {
@@ -279,6 +298,74 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       ),
     );
   }
+}
+
+Future<bool> _launchProfileUri(Uri uri) async {
+  try {
+    if (await launchUrl(uri, mode: LaunchMode.platformDefault)) return true;
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (error) {
+    safePrintError(error);
+    return false;
+  }
+}
+
+Uri? _uriForProfileLink(ProfileLinkModel link) {
+  final raw = (link.url?.trim().isNotEmpty == true ? link.url : link.value)
+      ?.trim();
+  if (raw == null || raw.isEmpty) return null;
+
+  final normalized = switch (link.linkType) {
+    'phone' => raw.startsWith('tel:') ? raw : 'tel:${_cleanPhone(raw)}',
+    'email' => raw.startsWith('mailto:') ? raw : 'mailto:$raw',
+    'whatsapp' => _whatsappUrl(raw),
+    'maps' => _mapsUrl(raw),
+    'instagram' => _socialUrl(raw, 'https://instagram.com/'),
+    'facebook' => _socialUrl(raw, 'https://facebook.com/'),
+    'linkedin' => _socialUrl(raw, 'https://linkedin.com/in/'),
+    'tiktok' =>
+      raw.startsWith('http')
+          ? raw
+          : 'https://tiktok.com/@${raw.replaceAll('@', '')}',
+    'youtube' => _socialUrl(raw, 'https://youtube.com/'),
+    'x' => _socialUrl(raw, 'https://x.com/'),
+    _ => _ensureWebUrl(raw),
+  };
+  if (normalized.isEmpty) return null;
+  return Uri.tryParse(normalized);
+}
+
+String _cleanPhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
+
+String _ensureWebUrl(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  if (trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('mailto:') ||
+      trimmed.startsWith('tel:')) {
+    return trimmed;
+  }
+  return 'https://$trimmed';
+}
+
+String _whatsappUrl(String value) {
+  final trimmed = value.trim();
+  if (trimmed.startsWith('http')) return trimmed;
+  final phone = _cleanPhone(trimmed).replaceAll('+', '');
+  return phone.isEmpty ? '' : 'https://wa.me/$phone';
+}
+
+String _mapsUrl(String value) {
+  final trimmed = value.trim();
+  if (trimmed.startsWith('http')) return trimmed;
+  return 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(trimmed)}';
+}
+
+String _socialUrl(String value, String baseUrl) {
+  final trimmed = value.trim();
+  if (trimmed.startsWith('http')) return trimmed;
+  return '$baseUrl${trimmed.replaceAll('@', '')}';
 }
 
 class _InlineSmartForm extends StatefulWidget {
