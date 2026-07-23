@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
@@ -392,6 +393,9 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
   bool loading = false;
 
   List<SmartFormFieldModel> get fields {
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(widget.profile.publicLocale),
+    );
     if (widget.fields.isNotEmpty) {
       return [...widget.fields]..sort(_compareFormFields);
     }
@@ -401,8 +405,8 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
         formId: widget.form.id,
         fieldKey: 'name',
         fieldType: 'text',
-        label: 'Nombre',
-        placeholder: 'Nombre',
+        label: t.text('Nombre', 'Name'),
+        placeholder: t.text('Nombre', 'Name'),
         isRequired: true,
         sortOrder: 1,
       ),
@@ -411,8 +415,8 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
         formId: widget.form.id,
         fieldKey: 'email',
         fieldType: 'email',
-        label: 'Correo',
-        placeholder: 'Correo',
+        label: t.text('Correo', 'Email'),
+        placeholder: t.text('Correo', 'Email'),
         isRequired: true,
         sortOrder: 2,
       ),
@@ -421,8 +425,8 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
         formId: widget.form.id,
         fieldKey: 'phone',
         fieldType: 'phone',
-        label: 'Teléfono',
-        placeholder: 'Teléfono',
+        label: t.text('Teléfono', 'Phone'),
+        placeholder: t.text('Teléfono', 'Phone'),
         sortOrder: 3,
       ),
     ];
@@ -441,6 +445,9 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
   }
 
   Future<void> submit() async {
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(widget.profile.publicLocale),
+    );
     final values = <String, dynamic>{
       for (final field in fields)
         field.fieldKey: controllerFor(field).text.trim(),
@@ -452,14 +459,28 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
           (values[field.fieldKey]?.toString().trim().isEmpty ?? true),
     );
     if (missingRequired) {
-      taploeToast(context, 'Completa los campos requeridos.', error: true);
+      taploeToast(
+        context,
+        t.text(
+          'Completa los campos requeridos.',
+          'Complete the required fields.',
+        ),
+        error: true,
+      );
       return;
     }
     final hasAnyContact = fields.any(
       (field) => controllerFor(field).text.trim().isNotEmpty,
     );
     if (!hasAnyContact) {
-      taploeToast(context, 'Agrega al menos un dato de contacto.', error: true);
+      taploeToast(
+        context,
+        t.text(
+          'Agrega al menos un dato de contacto.',
+          'Add at least one contact detail.',
+        ),
+        error: true,
+      );
       return;
     }
     setState(() => loading = true);
@@ -472,7 +493,7 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
         accessPointId: widget.accessPointId,
       );
       if (!mounted) return;
-      taploeToast(context, 'Información enviada.');
+      taploeToast(context, t.text('Información enviada.', 'Information sent.'));
       for (final controller in controllers.values) {
         controller.clear();
       }
@@ -481,7 +502,10 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
       if (mounted) {
         taploeToast(
           context,
-          'No pudimos enviar la información. Intenta de nuevo.',
+          t.text(
+            'No pudimos enviar la información. Intenta de nuevo.',
+            'We could not send the information. Try again.',
+          ),
           error: true,
         );
       }
@@ -492,6 +516,10 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
 
   @override
   Widget build(BuildContext context) {
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(widget.profile.publicLocale),
+    );
+    final submitStyle = _PublicSubmitButtonStyle.fromProfile(widget.profile);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -515,8 +543,135 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
           const SizedBox(height: 8),
         ],
         const SizedBox(height: 10),
-        TaploeButton(label: 'Enviar', loading: loading, onPressed: submit),
+        _PublicFormSubmitButton(
+          label: t.submitForm,
+          loading: loading,
+          style: submitStyle,
+          onPressed: submit,
+        ),
       ],
+    );
+  }
+}
+
+class _PublicFormSubmitButton extends StatelessWidget {
+  final String label;
+  final bool loading;
+  final _PublicSubmitButtonStyle style;
+  final VoidCallback? onPressed;
+
+  const _PublicFormSubmitButton({
+    required this.label,
+    required this.loading,
+    required this.style,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = loading
+        ? style.background.withValues(alpha: .64)
+        : style.background;
+    return SizedBox(
+      height: 54,
+      child: OutlinedButton(
+        onPressed: loading ? null : onPressed,
+        style: ButtonStyle(
+          elevation: const WidgetStatePropertyAll(0),
+          backgroundColor: WidgetStatePropertyAll(background),
+          foregroundColor: WidgetStatePropertyAll(style.foreground),
+          side: WidgetStatePropertyAll(BorderSide(color: style.background)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(style.radius),
+            ),
+          ),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            _publicSubmitFont(
+              style.fontFamily,
+              color: style.foreground,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        child: loading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: style.foreground,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.send_rounded, size: 19, color: style.foreground),
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(label, maxLines: 1),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _PublicSubmitButtonStyle {
+  final Color background;
+  final Color foreground;
+  final double radius;
+  final String fontFamily;
+
+  const _PublicSubmitButtonStyle({
+    required this.background,
+    required this.foreground,
+    required this.radius,
+    required this.fontFamily,
+  });
+
+  factory _PublicSubmitButtonStyle.fromProfile(DigitalProfileModel profile) {
+    final theme = profile.theme ?? ProfileThemeModel(profileId: profile.id);
+    final primaryColor = _publicColorFromHex(
+      theme.primaryColor,
+      fallback: TaploeColors.blue,
+    );
+    final accentColor = _publicColorFromHex(
+      theme.accentColor,
+      fallback: primaryColor,
+    );
+    final backgroundColor = _publicColorFromHex(
+      theme.backgroundColorStart,
+      fallback: TaploeColors.white,
+    );
+    final actionColor = _bestPublicActionColor(
+      primaryColor: primaryColor,
+      accentColor: accentColor,
+      backgroundColor: backgroundColor,
+    );
+    final foreground = actionColor.computeLuminance() > .62
+        ? TaploeColors.black
+        : TaploeColors.white;
+    final radius = switch (theme.buttonStyle) {
+      'square' => 10.0,
+      'rounded' => 18.0,
+      _ => 999.0,
+    };
+
+    return _PublicSubmitButtonStyle(
+      background: actionColor,
+      foreground: foreground,
+      radius: radius,
+      fontFamily: theme.fontFamily,
     );
   }
 }
@@ -564,4 +719,69 @@ String _fieldPlaceholder(SmartFormFieldModel field) {
   final placeholder = field.placeholder?.trim();
   if (placeholder != null && placeholder.isNotEmpty) return placeholder;
   return field.label;
+}
+
+Color _publicColorFromHex(String value, {required Color fallback}) {
+  final clean = value.replaceAll('#', '').trim();
+  if (clean.length != 6) return fallback;
+  final parsed = int.tryParse('FF$clean', radix: 16);
+  return parsed == null ? fallback : Color(parsed);
+}
+
+Color _bestPublicActionColor({
+  required Color primaryColor,
+  required Color accentColor,
+  required Color backgroundColor,
+}) {
+  if (_publicContrastRatio(primaryColor, backgroundColor) >= 3) {
+    return primaryColor;
+  }
+  if (_publicContrastRatio(accentColor, backgroundColor) >= 3) {
+    return accentColor;
+  }
+  return backgroundColor.computeLuminance() > .5
+      ? TaploeColors.black
+      : TaploeColors.white;
+}
+
+double _publicContrastRatio(Color a, Color b) {
+  final first = a.computeLuminance();
+  final second = b.computeLuminance();
+  final lighter = first > second ? first : second;
+  final darker = first > second ? second : first;
+  return (lighter + .05) / (darker + .05);
+}
+
+TextStyle _publicSubmitFont(
+  String family, {
+  required double fontSize,
+  required FontWeight fontWeight,
+  required Color color,
+}) {
+  switch (family) {
+    case 'poppins':
+      return GoogleFonts.poppins(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+      );
+    case 'montserrat':
+      return GoogleFonts.montserrat(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+      );
+    default:
+      return fontWeight.value >= FontWeight.w600.value
+          ? GoogleFonts.outfit(
+              fontSize: fontSize,
+              fontWeight: fontWeight,
+              color: color,
+            )
+          : GoogleFonts.dmSans(
+              fontSize: fontSize,
+              fontWeight: fontWeight,
+              color: color,
+            );
+  }
 }

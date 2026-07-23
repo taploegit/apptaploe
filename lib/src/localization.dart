@@ -104,6 +104,7 @@ class TaploeTextCatalog {
   String get englishUs =>
       text('Inglés / Estados Unidos / USD', 'English / United States / USD');
   String get saveContact => text('Guardar contacto', 'Save contact');
+  String get submitForm => text('Enviar', 'Send');
   String get sendMail => text('Enviar correo', 'Send mail');
   String get connectWithMe => text('Conecta conmigo', 'Connect with me');
   String get contact => text('Contacto', 'Contact');
