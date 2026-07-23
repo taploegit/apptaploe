@@ -524,21 +524,26 @@ class _InlineSmartFormState extends State<_InlineSmartForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final field in fields) ...[
-          TextField(
-            controller: controllerFor(field),
-            keyboardType: _keyboardTypeFor(field.fieldType),
-            textInputAction: field.fieldType == 'textarea'
-                ? TextInputAction.newline
-                : TextInputAction.next,
-            minLines: field.fieldType == 'textarea' ? 3 : 1,
-            maxLines: field.fieldType == 'textarea' ? 5 : 1,
-            onSubmitted: (_) {
-              if (!loading) submit();
+          Builder(
+            builder: (context) {
+              final label = _localizedFieldLabel(field, t);
+              return TextField(
+                controller: controllerFor(field),
+                keyboardType: _keyboardTypeFor(field.fieldType),
+                textInputAction: field.fieldType == 'textarea'
+                    ? TextInputAction.newline
+                    : TextInputAction.next,
+                minLines: field.fieldType == 'textarea' ? 3 : 1,
+                maxLines: field.fieldType == 'textarea' ? 5 : 1,
+                onSubmitted: (_) {
+                  if (!loading) submit();
+                },
+                decoration: InputDecoration(
+                  hintText: _localizedFieldPlaceholder(field, t),
+                  labelText: field.isRequired ? '$label *' : label,
+                ),
+              );
             },
-            decoration: InputDecoration(
-              hintText: _fieldPlaceholder(field),
-              labelText: field.isRequired ? '${field.label} *' : field.label,
-            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -719,6 +724,128 @@ String _fieldPlaceholder(SmartFormFieldModel field) {
   final placeholder = field.placeholder?.trim();
   if (placeholder != null && placeholder.isNotEmpty) return placeholder;
   return field.label;
+}
+
+String _localizedFieldLabel(SmartFormFieldModel field, TaploeTextCatalog t) {
+  final known = _knownPublicField(field);
+  if (known == null) return field.label;
+  return _publicFieldLabel(known, t);
+}
+
+String _localizedFieldPlaceholder(
+  SmartFormFieldModel field,
+  TaploeTextCatalog t,
+) {
+  final known = _knownPublicField(field);
+  if (known == null) return _fieldPlaceholder(field);
+  return _publicFieldPlaceholder(known, t);
+}
+
+String? _knownPublicField(SmartFormFieldModel field) {
+  final key = _normalizePublicFieldText(field.fieldKey);
+  final label = _normalizePublicFieldText(field.label);
+  final type = _normalizePublicFieldText(field.fieldType);
+
+  if (key == 'name' ||
+      key == 'nombre' ||
+      key == 'full_name' ||
+      key == 'fullname' ||
+      label == 'nombre' ||
+      label == 'nombre_completo') {
+    return 'name';
+  }
+  if (key == 'email' ||
+      key == 'correo' ||
+      key == 'correo_electronico' ||
+      label == 'email' ||
+      label == 'correo' ||
+      label == 'correo_electronico' ||
+      type == 'email') {
+    return 'email';
+  }
+  if (key == 'phone' ||
+      key == 'telefono' ||
+      key == 'tel' ||
+      label == 'telefono' ||
+      type == 'phone') {
+    return 'phone';
+  }
+  if (key == 'company' ||
+      key == 'empresa' ||
+      label == 'empresa' ||
+      label == 'nombre_de_tu_empresa') {
+    return 'company';
+  }
+  if (key == 'message' || key == 'mensaje' || label == 'mensaje') {
+    return 'message';
+  }
+  if (key == 'budget' || key == 'presupuesto' || label == 'presupuesto') {
+    return 'budget';
+  }
+  if (key == 'date' || key == 'fecha' || label == 'fecha' || type == 'date') {
+    return 'date';
+  }
+  return null;
+}
+
+String _publicFieldLabel(String key, TaploeTextCatalog t) {
+  switch (key) {
+    case 'name':
+      return t.text('Nombre', 'Name');
+    case 'email':
+      return t.text('Correo', 'Email');
+    case 'phone':
+      return t.text('Teléfono', 'Phone');
+    case 'company':
+      return t.text('Empresa', 'Company');
+    case 'message':
+      return t.text('Mensaje', 'Message');
+    case 'budget':
+      return t.text('Presupuesto', 'Budget');
+    case 'date':
+      return t.text('Fecha', 'Date');
+    default:
+      return key;
+  }
+}
+
+String _publicFieldPlaceholder(String key, TaploeTextCatalog t) {
+  switch (key) {
+    case 'name':
+      return t.text('Tu nombre', 'Your name');
+    case 'email':
+      return t.text('tu@ejemplo.com', 'you@example.com');
+    case 'phone':
+      return t.text('+52 664 123 4567', '+1 555 123 4567');
+    case 'company':
+      return t.text('Nombre de tu empresa', 'Company name');
+    case 'message':
+      return t.text(
+        'Cuéntanos en qué podemos ayudarte',
+        'Tell us how we can help',
+      );
+    case 'budget':
+      return t.text('Ej. \$10,000 MXN', 'E.g. \$1,000 USD');
+    case 'date':
+      return t.text('Selecciona una fecha', 'Select a date');
+    default:
+      return key;
+  }
+}
+
+String _normalizePublicFieldText(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll('ñ', 'n')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
 }
 
 Color _publicColorFromHex(String value, {required Color fallback}) {
