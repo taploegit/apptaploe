@@ -102,14 +102,12 @@ class _PublicProfileViewState extends State<PublicProfileView> {
       safePrintError(error);
     }
 
-    if (profileCapabilities.canUseIntegrations) {
-      try {
-        nextIntegrations = await IntegrationRepository.fetchForProfile(
-          profileId: p.id,
-        );
-      } catch (error) {
-        safePrintError(error);
-      }
+    try {
+      nextIntegrations = await IntegrationRepository.fetchPublicForProfile(
+        profileId: p.id,
+      );
+    } catch (error) {
+      safePrintError(error);
     }
 
     if (!mounted || profile?.id != p.id) return;
@@ -259,6 +257,8 @@ class _PublicProfileViewState extends State<PublicProfileView> {
         p.coverPhotoUrl?.trim().isNotEmpty == true ||
         p.theme != null;
     final canShowPublicForms = capabilities.canUseForms || forms.isNotEmpty;
+    final canShowPublicIntegrations =
+        capabilities.canUseIntegrations || integrations.isNotEmpty;
 
     return Scaffold(
       backgroundColor: TaploeColors.page,
@@ -279,7 +279,7 @@ class _PublicProfileViewState extends State<PublicProfileView> {
                 allowCustomDesign:
                     capabilities.canUseDesign || hasStoredIdentity,
                 allowForms: canShowPublicForms,
-                allowIntegrations: capabilities.canUseIntegrations,
+                allowIntegrations: canShowPublicIntegrations,
                 showTaploeWatermark: !capabilities.canRemoveTaploeWatermark,
                 onSaveContact: _saveContact,
                 onShare: _shareProfile,

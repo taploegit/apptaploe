@@ -2655,6 +2655,43 @@ class SmartFormRepository {
 }
 
 class IntegrationRepository {
+  static Future<List<ProfileIntegrationModel>> fetchPublicForProfile({
+    required String profileId,
+  }) async {
+    try {
+      final rows = await _db.rpc(
+        'public_profile_integrations',
+        params: {'p_profile_id': profileId},
+      );
+      return _integrationRows(rows).map((row) {
+        if (row['user_integrations'] is Map) {
+          return ProfileIntegrationModel.fromJson(row);
+        }
+        return ProfileIntegrationModel.fromPublicJson(row);
+      }).toList();
+    } catch (error) {
+      debugPrint(
+        '[TaploeIntegrations] No se pudo usar public_profile_integrations; intentando lectura directa.',
+      );
+      safePrintError(error);
+    }
+
+    final rows = await _db
+        .from('profile_integrations')
+        .select('*, user_integrations!inner(*)')
+        .eq('profile_id', profileId)
+        .eq('is_enabled', true)
+        .eq('user_integrations.status', 'active')
+        .order('sort_order');
+    return _integrationRows(rows)
+        .map(ProfileIntegrationModel.fromJson)
+        .where(
+          (integration) =>
+              integration.integration?.publicUrl?.trim().isNotEmpty == true,
+        )
+        .toList();
+  }
+
   static Future<List<ProfileIntegrationModel>> fetchForProfile({
     required String profileId,
   }) async {
@@ -2668,6 +2705,14 @@ class IntegrationRepository {
           (e) => ProfileIntegrationModel.fromJson(Map<String, dynamic>.from(e)),
         )
         .toList();
+  }
+
+  static List<Map<String, dynamic>> _integrationRows(dynamic rows) {
+    if (rows is List) {
+      return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    if (rows is Map) return [Map<String, dynamic>.from(rows)];
+    return const [];
   }
 
   static Future<ProfileIntegrationModel> upsertProfileIntegration({

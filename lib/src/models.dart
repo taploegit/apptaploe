@@ -1182,6 +1182,24 @@ class ProfileIntegrationModel {
           : null,
     );
   }
+
+  factory ProfileIntegrationModel.fromPublicJson(Map<String, dynamic> json) =>
+      ProfileIntegrationModel(
+        id: json['id'] as String,
+        profileId: json['profile_id'] as String? ?? '',
+        integrationId: json['integration_id'] as String? ?? '',
+        isEnabled: json['is_enabled'] as bool? ?? true,
+        displayLabel: json['display_label'] as String?,
+        sortOrder: _int(json['sort_order']),
+        integration: UserIntegrationModel(
+          id: json['integration_id'] as String? ?? '',
+          userId: json['user_id'] as String? ?? '',
+          integrationType: json['integration_type'] as String? ?? 'calendar',
+          provider: json['provider'] as String? ?? '',
+          publicUrl: json['public_url'] as String?,
+          status: json['status'] as String? ?? 'active',
+        ),
+      );
 }
 
 class LeadModel {
