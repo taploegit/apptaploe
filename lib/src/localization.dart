@@ -377,6 +377,7 @@ const Map<String, String> _taploeEnglishPhrases = {
   'Editar perfil': 'Edit profile',
   'Ver mi perfil': 'View my profile',
   'Ver perfil': 'View profile',
+  'Verificado': 'Verified',
   'Compartir': 'Share',
   'Compartir perfil': 'Share profile',
   'Compartir contacto': 'Share contact',

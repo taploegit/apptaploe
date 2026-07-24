@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'localized_text.dart';
 import 'router.dart';
 import 'state.dart';
 import 'theme.dart';
@@ -24,6 +25,10 @@ class TaploeApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
+          builder: (context, child) => TaploeTextScope(
+            catalog: taploeState.t,
+            child: child ?? const SizedBox.shrink(),
+          ),
           routerConfig: taploeRouter,
         );
       },

@@ -54,7 +54,7 @@ class _AuthPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = taploeState.t;
+    final t = TaploeTextScope.of(context);
     return TaploePanel(
       padding: EdgeInsets.symmetric(
         horizontal: context.isMobile ? 22 : 42,
@@ -200,7 +200,7 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
-    final t = taploeState.t;
+    final t = TaploeTextScope.of(context);
     return AuthLayout(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -528,7 +528,7 @@ class _OtpViewState extends State<OtpView> {
 
   @override
   Widget build(BuildContext context) {
-    final t = taploeState.t;
+    final t = TaploeTextScope.of(context);
     return AuthLayout(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -646,7 +646,7 @@ class AuthLoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = taploeState.t;
+    final t = TaploeTextScope.of(context);
     return AuthLayout(
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -178,6 +178,7 @@ class _DashboardViewState extends State<DashboardView> {
       DashboardSection.leads,
     ];
     final mobileSelectedIndex = mobileSections.indexOf(section);
+    final t = TaploeTextScope.of(context);
 
     return Scaffold(
       backgroundColor: TaploeColors.page,
@@ -219,24 +220,24 @@ class _DashboardViewState extends State<DashboardView> {
               onDestinationSelected: (i) =>
                   setState(() => section = mobileSections[i]),
               destinations: [
-                const NavigationDestination(
-                  icon: Icon(Icons.space_dashboard_outlined),
-                  label: 'Inicio',
+                NavigationDestination(
+                  icon: const Icon(Icons.space_dashboard_outlined),
+                  label: t.home,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.person_outline_rounded),
-                  label: 'Perfil',
+                NavigationDestination(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  label: t.text('Perfil', 'Profile'),
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.ios_share_rounded),
-                  label: 'Compartir',
+                NavigationDestination(
+                  icon: const Icon(Icons.ios_share_rounded),
+                  label: t.share,
                 ),
                 NavigationDestination(
                   icon: _PlanLockedNavIcon(
                     icon: Icons.insights_rounded,
                     locked: !taploeState.capabilities.canViewAnalytics,
                   ),
-                  label: 'Métricas',
+                  label: t.text('Métricas', 'Metrics'),
                 ),
                 NavigationDestination(
                   icon: _PlanLockedNavIcon(
