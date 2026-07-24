@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide IconButton, Text;
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../company_logo_drop.dart';
 import '../localization.dart';
+import '../localized_text.dart';
 import '../models.dart';
 import '../plan_capabilities.dart';
 import '../pricing.dart';
@@ -4642,7 +4643,10 @@ class _ProfileRequiredViewState extends State<_ProfileRequiredView> {
                         const SizedBox(height: 28),
                         _PublicSlugInput(
                           controller: slugController,
-                          errorText: errorText,
+                          errorText: taploeLocalizeNullableText(
+                            context,
+                            errorText,
+                          ),
                           onChanged: (_) {
                             if (errorText != null) {
                               setState(() => errorText = null);
@@ -4816,7 +4820,7 @@ class _PublicSlugInputState extends State<_PublicSlugInput> {
                               fontWeight: FontWeight.w400,
                               height: 1.05,
                             ),
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
@@ -4825,7 +4829,10 @@ class _PublicSlugInputState extends State<_PublicSlugInput> {
                               errorBorder: InputBorder.none,
                               focusedErrorBorder: InputBorder.none,
                               filled: false,
-                              hintText: 'tu-nombre',
+                              hintText: taploeLocalizeText(
+                                context,
+                                'tu-nombre',
+                              ),
                               contentPadding: EdgeInsets.zero,
                             ),
                           ),
@@ -6738,7 +6745,7 @@ class _CreateProfileModalState extends State<_CreateProfileModal> {
               label: 'Nombre del perfil',
               hint: 'Ej. Ventas Norte',
               controller: nameController,
-              errorText: errorText,
+              errorText: taploeLocalizeNullableText(context, errorText),
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => submit(),
             ),
@@ -7307,7 +7314,12 @@ class _CardLinkingSuccessCard extends StatelessWidget {
             text: TextSpan(
               style: GoogleFonts.dmSans(color: context.muted, height: 1.45),
               children: [
-                const TextSpan(text: 'Tu tarjeta ya está conectada al perfil '),
+                TextSpan(
+                  text: taploeState.t.text(
+                    'Tu tarjeta ya está conectada al perfil ',
+                    'Your card is already connected to the ',
+                  ),
+                ),
                 TextSpan(
                   text: profileName,
                   style: GoogleFonts.dmSans(
@@ -7315,7 +7327,7 @@ class _CardLinkingSuccessCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const TextSpan(text: '.'),
+                TextSpan(text: taploeState.t.text('.', ' profile.')),
               ],
             ),
           ),
@@ -11927,7 +11939,9 @@ class _ContactFieldCard extends StatelessWidget {
             keyboardType: keyboardType,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => onSubmitted?.call(),
-            decoration: InputDecoration(hintText: hint),
+            decoration: InputDecoration(
+              hintText: taploeLocalizeNullableText(context, hint),
+            ),
           );
 
           final visibility = visible == null
@@ -16939,8 +16953,8 @@ Future<void> _showFieldEditorDialog(
                   children: [
                     DropdownButtonFormField<String>(
                       initialValue: fieldType,
-                      decoration: const InputDecoration(
-                        labelText: 'Tipo de campo',
+                      decoration: InputDecoration(
+                        labelText: taploeLocalizeText(context, 'Tipo de campo'),
                       ),
                       items:
                           const [
@@ -19850,7 +19864,7 @@ class _LeadsFiltersPanel extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         _LeadFilterDropdown(
-          label: 'Estado',
+          label: taploeState.t.text('Estado', 'Status'),
           value: statusFilter,
           items: const {
             'all': 'Todos los estados',
@@ -20102,9 +20116,9 @@ class _LeadsToolbar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 onChanged: onSearchChanged,
-                decoration: const InputDecoration(
-                  hintText: 'Buscar leads...',
-                  prefixIcon: Icon(Icons.search_rounded),
+                decoration: InputDecoration(
+                  hintText: taploeLocalizeText(context, 'Buscar leads...'),
+                  prefixIcon: const Icon(Icons.search_rounded),
                 ),
               ),
             ),
@@ -22258,13 +22272,13 @@ class _TeamMembersTable extends StatelessWidget {
         dataRowMaxHeight: 76,
         horizontalMargin: 12,
         columnSpacing: 22,
-        columns: const [
-          DataColumn(label: Text('Miembro')),
-          DataColumn(label: Text('Rol')),
-          DataColumn(label: Text('Perfiles')),
-          DataColumn(label: Text('Tarjetas')),
-          DataColumn(label: Text('Última actividad')),
-          DataColumn(label: Text('Estado')),
+        columns: [
+          const DataColumn(label: Text('Miembro')),
+          const DataColumn(label: Text('Rol')),
+          const DataColumn(label: Text('Perfiles')),
+          const DataColumn(label: Text('Tarjetas')),
+          const DataColumn(label: Text('Última actividad')),
+          DataColumn(label: Text(taploeState.t.text('Estado', 'Status'))),
         ],
         rows: members
             .map(
@@ -23777,7 +23791,10 @@ class _TeamProfilesTableHeader extends StatelessWidget {
               Expanded(flex: 3, child: _AdminTableLabel('Miembro')),
               Expanded(flex: 3, child: _AdminTableLabel('Cargo / Empresa')),
               Expanded(flex: 3, child: _AdminTableLabel('Perfil público')),
-              Expanded(flex: 2, child: _AdminTableLabel('Estado')),
+              Expanded(
+                flex: 2,
+                child: _AdminTableLabel(taploeState.t.text('Estado', 'Status')),
+              ),
               Expanded(flex: 3, child: _AdminTableLabel('Progreso')),
               SizedBox(width: 330, child: _AdminTableLabel('Acciones')),
             ],

@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../localized_text.dart';
 import '../repositories.dart';
 import '../state.dart';
 import '../theme.dart';
@@ -239,7 +240,7 @@ class _LoginViewState extends State<LoginView> {
             hint: 'Email',
             controller: email,
             keyboardType: TextInputType.emailAddress,
-            errorText: error,
+            errorText: taploeLocalizeNullableText(context, error),
             prefixIcon: const Icon(Icons.mail_outline_rounded),
             onChanged: (_) {
               if (error != null) setState(() => error = null);
@@ -575,7 +576,7 @@ class _OtpViewState extends State<OtpView> {
             decoration: InputDecoration(
               counterText: '',
               hintText: '00000000',
-              errorText: error,
+              errorText: taploeLocalizeNullableText(context, error),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 20,
                 vertical: 22,

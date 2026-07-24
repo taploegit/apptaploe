@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../localization.dart';
+import '../localized_text.dart';
 import '../plan_capabilities.dart';
 import '../profile_public_card.dart';
 import '../repositories.dart';
@@ -141,11 +142,17 @@ class _PublicProfileViewState extends State<PublicProfileView> {
   Future<void> _openLink(ProfileLinkModel link) async {
     final p = profile;
     if (p == null) return;
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(p.publicLocale),
+    );
     final uri = _uriForProfileLink(link);
     if (uri == null) {
       taploeToast(
         context,
-        'Este enlace no tiene información válida.',
+        t.text(
+          'Este enlace no tiene información válida.',
+          'This link has no valid information.',
+        ),
         error: true,
       );
       return;
@@ -164,13 +171,23 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     );
     if (!await _launchProfileUri(uri)) {
       if (!mounted) return;
-      taploeToast(context, 'No se pudo abrir este enlace.', error: true);
+      taploeToast(
+        context,
+        t.text(
+          'No se pudo abrir este enlace.',
+          'This link could not be opened.',
+        ),
+        error: true,
+      );
     }
   }
 
   Future<void> _openIntegration(ProfileIntegrationModel integration) async {
     final p = profile;
     if (p == null) return;
+    final t = TaploeTextCatalog(
+      TaploeLocaleConfig.fromLocaleParam(p.publicLocale),
+    );
     final raw = integration.integration?.publicUrl;
     final uri = raw == null ? null : Uri.tryParse(raw);
     if (uri == null) return;
@@ -191,7 +208,14 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     );
     if (!await _launchProfileUri(uri)) {
       if (!mounted) return;
-      taploeToast(context, 'No se pudo abrir esta integración.', error: true);
+      taploeToast(
+        context,
+        t.text(
+          'No se pudo abrir esta integración.',
+          'This integration could not be opened.',
+        ),
+        error: true,
+      );
     }
   }
 
@@ -220,7 +244,10 @@ class _PublicProfileViewState extends State<PublicProfileView> {
     if (opened) return;
     await Clipboard.setData(ClipboardData(text: vcf));
     if (mounted) {
-      taploeToast(context, '${t.vcardCopied} No se pudo abrir el archivo.');
+      taploeToast(
+        context,
+        '${t.vcardCopied} ${t.text('No se pudo abrir el archivo.', 'The file could not be opened.')}',
+      );
     }
   }
 

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide IconButton, Text;
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'localized_text.dart';
 import 'theme.dart';
 
 class TaploeLogo extends StatelessWidget {
@@ -271,6 +272,9 @@ class TaploeTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizedHint = taploeLocalizeNullableText(context, hint);
+    final localizedHelper = taploeLocalizeNullableText(context, helperText);
+    final localizedError = taploeLocalizeNullableText(context, errorText);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -298,9 +302,9 @@ class TaploeTextField extends StatelessWidget {
           onChanged: onChanged,
           onSubmitted: onSubmitted,
           decoration: InputDecoration(
-            hintText: hint,
-            helperText: helperText,
-            errorText: errorText,
+            hintText: localizedHint,
+            helperText: localizedHelper,
+            errorText: localizedError,
             counterText: '',
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,

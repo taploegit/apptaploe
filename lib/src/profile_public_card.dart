@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'localization.dart';
+import 'localized_text.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'utils.dart';
@@ -575,7 +576,7 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
     );
 
     if (!framed) {
-      return surface;
+      return TaploeTextScope(catalog: t, child: surface);
     }
 
     return SizedBox(
@@ -598,7 +599,10 @@ class _TaploePublicProfileCardState extends State<TaploePublicProfileCard> {
           fit: StackFit.expand,
           alignment: Alignment.topCenter,
           children: [
-            ClipRRect(borderRadius: BorderRadius.circular(39), child: surface),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(39),
+              child: TaploeTextScope(catalog: t, child: surface),
+            ),
             Positioned(
               top: 6,
               child: Container(
@@ -1012,17 +1016,17 @@ IconData _publicLinkIcon(String type) {
 String _defaultLinkLabel(String type) {
   switch (type) {
     case 'phone':
-      return 'Call';
+      return 'Llamar';
     case 'maps':
-      return 'Location';
+      return 'Ubicación';
     case 'catalog':
-      return 'Catalog';
+      return 'Catálogo';
     case 'file':
-      return 'File';
+      return 'Archivo';
     case 'payment':
-      return 'Payment';
+      return 'Pago';
     default:
-      return 'Open link';
+      return 'Abrir enlace';
   }
 }
 

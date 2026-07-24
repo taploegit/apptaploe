@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide IconButton, Text;
 import 'package:google_fonts/google_fonts.dart';
 
 import 'models.dart';
+import 'localized_text.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'utils.dart';

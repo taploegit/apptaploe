@@ -7,10 +7,11 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:ui_web' as ui_web;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide IconButton, Text;
 import 'package:google_fonts/google_fonts.dart';
 
 import 'theme.dart';
+import 'localized_text.dart';
 
 Future<String?> scanTaploeQrCode(BuildContext context) async {
   return showDialog<String?>(
