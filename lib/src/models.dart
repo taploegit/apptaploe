@@ -1010,7 +1010,7 @@ class CardRedirectModel {
         id: json['id'] as String,
         ownerUserId: json['owner_user_id'] as String? ?? '',
         slug: json['slug'] as String? ?? '',
-        label: json['label'] as String? ?? 'Card redirect',
+        label: json['label'] as String? ?? 'Taploe redirect card',
         destinationUrl: json['destination_url'] as String?,
         status: json['status'] as String? ?? 'active',
         clickCount: _int(json['click_count']),

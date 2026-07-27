@@ -6,7 +6,7 @@ create table if not exists public.card_redirects (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid references public.app_users(id) on delete cascade,
   slug text not null unique,
-  label text not null default 'Card redirect',
+  label text not null default 'Taploe redirect card',
   destination_url text,
   status text not null default 'draft',
   click_count integer not null default 0 check (click_count >= 0),

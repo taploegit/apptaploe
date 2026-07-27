@@ -27,6 +27,7 @@ import '../pricing.dart';
 import '../profile_public_card.dart';
 import '../pwa_install_panel.dart';
 import '../qr_scanner.dart';
+import '../redirect_navigation.dart';
 import '../realtime.dart';
 import '../repositories.dart';
 import '../state.dart';
@@ -17651,8 +17652,11 @@ class RedirectManagerView extends StatefulWidget {
   State<RedirectManagerView> createState() => _RedirectManagerViewState();
 }
 
+enum _RedirectSortMode { nameAsc, genericUrlAsc, createdNewest, createdOldest }
+
 class _RedirectManagerViewState extends State<RedirectManagerView> {
   bool loading = false;
+  _RedirectSortMode sortMode = _RedirectSortMode.createdNewest;
 
   Future<void> _create({String? label, String? destinationUrl}) async {
     final user = taploeState.currentUser;
@@ -17723,6 +17727,8 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
   @override
   Widget build(BuildContext context) {
     final redirects = taploeState.cardRedirects;
+    final sortedRedirects = [...redirects]
+      ..sort((a, b) => _compareRedirects(a, b, sortMode));
     final activeRedirects = redirects.where((item) => item.isActive).length;
     final totalClicks = redirects.fold<int>(
       0,
@@ -17796,8 +17802,16 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
           const SizedBox(height: 18),
           if (redirects.isEmpty)
             const _RedirectsEmptyState()
-          else
-            ...redirects.map(
+          else ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: _RedirectSortMenu(
+                value: sortMode,
+                onChanged: (value) => setState(() => sortMode = value),
+              ),
+            ),
+            const SizedBox(height: 18),
+            ...sortedRedirects.map(
               (redirect) => Padding(
                 padding: const EdgeInsets.only(bottom: 18),
                 child: _RedirectRow(
@@ -17807,7 +17821,122 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
                 ),
               ),
             ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+int _compareRedirects(
+  CardRedirectModel a,
+  CardRedirectModel b,
+  _RedirectSortMode mode,
+) {
+  switch (mode) {
+    case _RedirectSortMode.nameAsc:
+      return _compareText(a.label, b.label);
+    case _RedirectSortMode.genericUrlAsc:
+      return _compareText(a.publicUrl, b.publicUrl);
+    case _RedirectSortMode.createdOldest:
+      return _compareDates(a.createdAt, b.createdAt);
+    case _RedirectSortMode.createdNewest:
+      return _compareDates(b.createdAt, a.createdAt);
+  }
+}
+
+int _compareText(String a, String b) =>
+    a.trim().toLowerCase().compareTo(b.trim().toLowerCase());
+
+int _compareDates(DateTime? a, DateTime? b) {
+  final left = a ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final right = b ?? DateTime.fromMillisecondsSinceEpoch(0);
+  return left.compareTo(right);
+}
+
+String _redirectSortLabel(_RedirectSortMode mode) {
+  switch (mode) {
+    case _RedirectSortMode.nameAsc:
+      return 'Nombre A-Z';
+    case _RedirectSortMode.genericUrlAsc:
+      return 'Generic URL A-Z';
+    case _RedirectSortMode.createdNewest:
+      return 'Más recientes';
+    case _RedirectSortMode.createdOldest:
+      return 'Más antiguos';
+  }
+}
+
+String _redirectSortEnglishLabel(_RedirectSortMode mode) {
+  switch (mode) {
+    case _RedirectSortMode.nameAsc:
+      return 'Name A-Z';
+    case _RedirectSortMode.genericUrlAsc:
+      return 'Generic URL A-Z';
+    case _RedirectSortMode.createdNewest:
+      return 'Newest';
+    case _RedirectSortMode.createdOldest:
+      return 'Oldest';
+  }
+}
+
+class _RedirectSortMenu extends StatelessWidget {
+  final _RedirectSortMode value;
+  final ValueChanged<_RedirectSortMode> onChanged;
+
+  const _RedirectSortMenu({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TaploeTextScope.of(context);
+    return PopupMenuButton<_RedirectSortMode>(
+      tooltip: 'Ordenar',
+      offset: const Offset(0, 10),
+      onSelected: onChanged,
+      itemBuilder: (context) => [
+        for (final mode in _RedirectSortMode.values)
+          PopupMenuItem(
+            value: mode,
+            child: Row(
+              children: [
+                Icon(
+                  value == mode
+                      ? Icons.check_rounded
+                      : Icons.sort_by_alpha_rounded,
+                  size: 18,
+                  color: value == mode ? TaploeColors.blue : context.muted,
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_redirectSortLabel(mode))),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: TaploeColors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: TaploeColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sort_rounded, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              t.text(
+                'Ordenar: ${_redirectSortLabel(value)}',
+                'Sort: ${_redirectSortEnglishLabel(value)}',
+              ),
+              style: GoogleFonts.dmSans(
+                color: context.text,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -17877,19 +18006,12 @@ class _RedirectRow extends StatelessWidget {
           final stacked = constraints.maxWidth < 760;
           final header = Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: TaploeColors.blue.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.alt_route_rounded,
-                  color: TaploeColors.blue,
-                ),
+              const Icon(
+                Icons.alt_route_rounded,
+                color: TaploeColors.blue,
+                size: 28,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -18092,7 +18214,7 @@ class _CreateRedirectSheetState extends State<_CreateRedirectSheet> {
   @override
   void initState() {
     super.initState();
-    label = TextEditingController(text: 'Card redirect');
+    label = TextEditingController(text: 'Taploe redirect card');
     destination = TextEditingController();
   }
 
@@ -18306,7 +18428,9 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
         id: widget.redirect.id,
         ownerUserId: widget.redirect.ownerUserId,
         slug: widget.redirect.slug,
-        label: label.text.trim().isEmpty ? 'Card redirect' : label.text.trim(),
+        label: label.text.trim().isEmpty
+            ? 'Taploe redirect card'
+            : label.text.trim(),
         destinationUrl: normalizedDestination,
         status: widget.redirect.status == 'inactive' ? 'inactive' : 'active',
         clickCount: widget.redirect.clickCount,
@@ -18458,9 +18582,7 @@ bool _isTaploeRedirectLoop(String value) {
 }
 
 Future<void> _openUrl(BuildContext context, String url) async {
-  final uri = Uri.tryParse(url);
-  if (uri == null ||
-      !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+  if (!await redirectToDestination(url)) {
     if (context.mounted) {
       taploeToast(context, 'No se pudo abrir el enlace.', error: true);
     }

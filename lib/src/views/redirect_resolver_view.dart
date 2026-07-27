@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart' hide Text;
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../localized_text.dart';
+import '../redirect_navigation.dart';
 import '../repositories.dart';
 import '../theme.dart';
 import '../utils.dart';
@@ -45,9 +45,7 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
       destinationUrl = destination;
       await CardRedirectRepository.trackClick(redirectId: redirect.id);
 
-      final uri = Uri.tryParse(destination);
-      if (uri == null ||
-          !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!await redirectToDestination(destination)) {
         if (mounted) {
           setState(() {
             loading = false;
@@ -105,10 +103,7 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
                     label: 'Open destination',
                     icon: Icons.open_in_new_rounded,
                     onPressed: () {
-                      final uri = Uri.tryParse(destinationUrl!);
-                      if (uri != null) {
-                        launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
+                      redirectToDestination(destinationUrl!);
                     },
                   ),
                 ],

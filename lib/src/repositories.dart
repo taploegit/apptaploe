@@ -1633,10 +1633,10 @@ class CardRedirectRepository {
           'owner_user_id': ownerUserId,
           'slug': baseSlug.length >= 3
               ? baseSlug
-              : slugify(label ?? 'card redirect'),
+              : slugify(label ?? 'taploe redirect card'),
           'label': label?.trim().isNotEmpty == true
               ? label!.trim()
-              : 'Card redirect',
+              : 'Taploe redirect card',
           'destination_url': cleanDestination,
           'status': cleanDestination == null ? 'draft' : 'active',
           'claimed_at': nowIso(),
@@ -1659,7 +1659,7 @@ class CardRedirectRepository {
         .from('card_redirects')
         .update({
           'label': redirect.label.trim().isEmpty
-              ? 'Card redirect'
+              ? 'Taploe redirect card'
               : redirect.label.trim(),
           'destination_url': cleanDestination,
           'status': status,
