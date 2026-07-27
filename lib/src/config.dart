@@ -9,4 +9,5 @@ class TaploeConfig {
 
   static String accessUrl(String token) => '$publicBaseUrl/a/$token';
   static String profileUrl(String slug) => '$publicBaseUrl/p/$slug';
+  static String redirectUrl(String slug) => '$publicBaseUrl/r/$slug';
 }

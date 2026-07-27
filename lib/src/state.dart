@@ -20,6 +20,7 @@ class TaploeState extends ChangeNotifier {
   List<BillingInvoiceModel> billingInvoices = [];
   List<DigitalProfileModel> profiles = [];
   List<PhysicalCardModel> cards = [];
+  List<CardRedirectModel> cardRedirects = [];
   DigitalProfileModel? activeProfile;
   TaploeLocaleConfig localeConfig = TaploeLocaleConfig.esMx;
   String? pendingActivationToken;
@@ -135,6 +136,9 @@ class TaploeState extends ChangeNotifier {
       await _refreshBilling();
 
       cards = await CardRepository.fetchCardsForUser(currentUser!.id);
+      cardRedirects = await CardRedirectRepository.fetchForUser(
+        currentUser!.id,
+      );
       profiles = await _fetchEditableProfiles();
       _selectActiveProfileFallback();
     } catch (error) {
@@ -220,6 +224,14 @@ class TaploeState extends ChangeNotifier {
     if (currentUser == null) return;
 
     cards = await CardRepository.fetchCardsForUser(currentUser!.id);
+    cardRedirects = await CardRedirectRepository.fetchForUser(currentUser!.id);
+    notifyListeners();
+  }
+
+  Future<void> refreshCardRedirects() async {
+    if (currentUser == null) return;
+
+    cardRedirects = await CardRedirectRepository.fetchForUser(currentUser!.id);
     notifyListeners();
   }
 
@@ -300,6 +312,7 @@ class TaploeState extends ChangeNotifier {
     billingInvoices = [];
     profiles = [];
     cards = [];
+    cardRedirects = [];
     activeProfile = null;
   }
 

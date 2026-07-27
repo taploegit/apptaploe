@@ -976,6 +976,57 @@ class PhysicalCardModel {
       'Tarjeta Taploe';
 }
 
+class CardRedirectModel {
+  final String id;
+  final String ownerUserId;
+  final String physicalCardId;
+  final String slug;
+  final String label;
+  final String destinationUrl;
+  final String status;
+  final int clickCount;
+  final DateTime? lastClickedAt;
+  final Map<String, dynamic> metadata;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  const CardRedirectModel({
+    required this.id,
+    required this.ownerUserId,
+    required this.physicalCardId,
+    required this.slug,
+    required this.label,
+    required this.destinationUrl,
+    required this.status,
+    this.clickCount = 0,
+    this.lastClickedAt,
+    this.metadata = const {},
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory CardRedirectModel.fromJson(Map<String, dynamic> json) =>
+      CardRedirectModel(
+        id: json['id'] as String,
+        ownerUserId: json['owner_user_id'] as String? ?? '',
+        physicalCardId: json['physical_card_id'] as String? ?? '',
+        slug: json['slug'] as String? ?? '',
+        label: json['label'] as String? ?? 'Card redirect',
+        destinationUrl: json['destination_url'] as String? ?? '',
+        status: json['status'] as String? ?? 'active',
+        clickCount: _int(json['click_count']),
+        lastClickedAt: _dt(json['last_clicked_at']),
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : const {},
+        createdAt: _dt(json['created_at']),
+        updatedAt: _dt(json['updated_at']),
+      );
+
+  String get publicUrl => TaploeConfig.redirectUrl(slug);
+  bool get isActive => status == 'active';
+}
+
 enum AccessResolutionAction {
   activate,
   openProfile,

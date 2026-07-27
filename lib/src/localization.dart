@@ -331,6 +331,10 @@ final List<_TaploeEnglishPattern> _taploeEnglishPatterns = [
     (match) => 'View all events (${match.group(1)})',
   ),
   _TaploeEnglishPattern(
+    RegExp(r'^([0-9]+) redirecciones$'),
+    (match) => '${match.group(1)} redirects',
+  ),
+  _TaploeEnglishPattern(
     RegExp(
       r'^(.+) ya está listo\. Puedes conectar una tarjeta NFC o QR físico ahora, o hacerlo después desde Tarjetas\.$',
     ),
@@ -368,6 +372,33 @@ const Map<String, String> _taploeEnglishPhrases = {
   'Tarjetas': 'Cards',
   'Tarjeta': 'Card',
   'Vincular tarjeta': 'Link card',
+  'Redirección': 'Redirects',
+  'URLs creadas': 'URLs created',
+  'Redirecciones': 'Redirects',
+  'URL genérica': 'Generic URL',
+  'Sin URL de redirección': 'No redirect URL',
+  'Generar URL': 'Generate URL',
+  'Editar redirección': 'Edit redirect',
+  'Editar destino': 'Edit destination',
+  'Destino': 'Destination',
+  'Nombre interno': 'Internal name',
+  'Copiar URL': 'Copy URL',
+  'URL de redirección creada.': 'Redirect URL created.',
+  'Redirección actualizada.': 'Redirect updated.',
+  'No pudimos crear la redirección.': 'We could not create the redirect.',
+  'No pudimos actualizar la redirección.': 'We could not update the redirect.',
+  'Ingresa una URL válida.': 'Enter a valid URL.',
+  'No puedes redirigir una URL genérica a otra URL genérica.':
+      'You cannot redirect a generic URL to another generic URL.',
+  'Configura URLs genéricas por tarjeta y cambia su destino.':
+      'Configure generic URLs per card and change their destination.',
+  'Genera una URL estable para esta tarjeta y cambia su destino cuando quieras.':
+      'Generate a stable URL for this card and change its destination anytime.',
+  'Vincula una tarjeta para crear su URL genérica.':
+      'Link a card to create its generic URL.',
+  'Cada tarjeta podrá tener una URL estable que redirige al destino que configures.':
+      'Each card can have a stable URL that redirects to the destination you configure.',
+  'Sin perfil vinculado': 'No linked profile',
   'Cambiar perfil': 'Change profile',
   'Crear nuevo perfil': 'Create new profile',
   'Nuevo perfil': 'New profile',

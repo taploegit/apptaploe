@@ -52,6 +52,7 @@ enum DashboardSection {
   home,
   profile,
   cards,
+  redirects,
   share,
   analytics,
   leads,
@@ -84,6 +85,7 @@ bool _canViewDashboardSection(DashboardSection section) {
     case DashboardSection.home:
     case DashboardSection.profile:
     case DashboardSection.cards:
+    case DashboardSection.redirects:
     case DashboardSection.share:
     case DashboardSection.settings:
       return true;
@@ -173,6 +175,7 @@ class _DashboardViewState extends State<DashboardView> {
     final mobileSections = [
       DashboardSection.home,
       DashboardSection.profile,
+      DashboardSection.redirects,
       DashboardSection.share,
       DashboardSection.analytics,
       DashboardSection.leads,
@@ -229,6 +232,10 @@ class _DashboardViewState extends State<DashboardView> {
                   label: t.text('Perfil', 'Profile'),
                 ),
                 NavigationDestination(
+                  icon: const Icon(Icons.alt_route_rounded),
+                  label: t.text('Redirección', 'Redirects'),
+                ),
+                NavigationDestination(
                   icon: const Icon(Icons.ios_share_rounded),
                   label: t.share,
                 ),
@@ -273,6 +280,8 @@ class _DashboardViewState extends State<DashboardView> {
         );
       case DashboardSection.cards:
         return const CardManagerView();
+      case DashboardSection.redirects:
+        return const RedirectManagerView();
       case DashboardSection.share:
         return const ShareCenterView();
       case DashboardSection.analytics:
@@ -6213,6 +6222,11 @@ class _Sidebar extends StatelessWidget {
         t.digitalProfile,
       ),
       (DashboardSection.cards, Icons.credit_card_rounded, t.cards),
+      (
+        DashboardSection.redirects,
+        Icons.alt_route_rounded,
+        t.text('Redirección', 'Redirects'),
+      ),
       (DashboardSection.share, Icons.ios_share_rounded, t.share),
       (DashboardSection.analytics, Icons.insights_rounded, t.analytics),
       (DashboardSection.leads, Icons.handshake_outlined, 'Leads'),
@@ -17627,6 +17641,650 @@ class _CardManagerViewState extends State<CardManagerView> {
         onChangeProfile: changeProfile,
       ),
     );
+  }
+}
+
+class RedirectManagerView extends StatefulWidget {
+  const RedirectManagerView({super.key});
+
+  @override
+  State<RedirectManagerView> createState() => _RedirectManagerViewState();
+}
+
+class _RedirectManagerViewState extends State<RedirectManagerView> {
+  bool loading = false;
+
+  Future<void> _createForCard(PhysicalCardModel card) async {
+    final user = taploeState.currentUser;
+    if (user == null) return;
+    final destination = _defaultRedirectDestination(card);
+    setState(() => loading = true);
+    try {
+      await CardRedirectRepository.create(
+        ownerUserId: user.id,
+        physicalCardId: card.id,
+        label: card.printedName?.trim().isNotEmpty == true
+            ? '${card.printedName} redirect'
+            : '${card.productLabel} redirect',
+        destinationUrl: destination,
+        preferredSlug: 'card-${card.serialNumber}',
+      );
+      await taploeState.refreshCardRedirects();
+      if (!mounted) return;
+      taploeToast(context, 'URL de redirección creada.');
+    } catch (error) {
+      safePrintError(error);
+      if (!mounted) return;
+      taploeToast(context, 'No pudimos crear la redirección.', error: true);
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _save(CardRedirectModel redirect) async {
+    setState(() => loading = true);
+    try {
+      await CardRedirectRepository.save(redirect);
+      await taploeState.refreshCardRedirects();
+      if (!mounted) return;
+      taploeToast(context, 'Redirección actualizada.');
+    } catch (error) {
+      safePrintError(error);
+      if (!mounted) return;
+      taploeToast(
+        context,
+        'No pudimos actualizar la redirección.',
+        error: true,
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  String _defaultRedirectDestination(PhysicalCardModel card) {
+    for (final profile in taploeState.profiles) {
+      if (profile.id == card.activeProfileId) {
+        return TaploeConfig.profileUrl(profile.publicSlug);
+      }
+    }
+    final active = taploeState.activeProfile;
+    if (active != null) return TaploeConfig.profileUrl(active.publicSlug);
+    return TaploeConfig.publicBaseUrl;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = taploeState.cards;
+    final redirects = taploeState.cardRedirects;
+    final redirectsByCard = {
+      for (final redirect in redirects) redirect.physicalCardId: redirect,
+    };
+    final activeRedirects = redirects.where((item) => item.isActive).length;
+    final totalClicks = redirects.fold<int>(
+      0,
+      (total, item) => total + item.clickCount,
+    );
+
+    return PageShell(
+      title: 'Redirección',
+      subtitle: 'Configura URLs genéricas por tarjeta y cambia su destino.',
+      actions: [
+        TaploeButton(
+          width: 190,
+          label: 'Vincular tarjeta',
+          icon: Icons.add_rounded,
+          kind: TaploeButtonKind.secondary,
+          onPressed: () => _showCardLinkingDialog(context),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final metrics = [
+                _CaptureFormMetric(
+                  icon: Icons.alt_route_rounded,
+                  value: '${redirects.length}',
+                  label: 'URLs creadas',
+                ),
+                _CaptureFormMetric(
+                  icon: Icons.radio_button_checked_rounded,
+                  value: '$activeRedirects',
+                  label: 'Activas',
+                ),
+                _CaptureFormMetric(
+                  icon: Icons.ads_click_rounded,
+                  value: '$totalClicks',
+                  label: 'Redirecciones',
+                ),
+              ];
+              if (constraints.maxWidth < 680) {
+                return Wrap(spacing: 28, runSpacing: 22, children: metrics);
+              }
+              return Row(
+                children: [
+                  for (var i = 0; i < metrics.length; i++) ...[
+                    Expanded(child: metrics[i]),
+                    if (i != metrics.length - 1)
+                      Container(
+                        width: 1,
+                        height: 54,
+                        margin: const EdgeInsets.symmetric(horizontal: 22),
+                        color: TaploeColors.border,
+                      ),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Divider(color: TaploeColors.border),
+          const SizedBox(height: 18),
+          if (cards.isEmpty)
+            const _RedirectsEmptyState()
+          else
+            ...cards.map(
+              (card) => Padding(
+                padding: const EdgeInsets.only(bottom: 18),
+                child: _RedirectCardRow(
+                  card: card,
+                  redirect: redirectsByCard[card.id],
+                  profiles: taploeState.profiles,
+                  loading: loading,
+                  onCreate: () => _createForCard(card),
+                  onSave: _save,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RedirectsEmptyState extends StatelessWidget {
+  const _RedirectsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.alt_route_rounded,
+            color: TaploeColors.blue,
+            size: 42,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Vincula una tarjeta para crear su URL genérica.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              color: context.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Cada tarjeta podrá tener una URL estable que redirige al destino que configures.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RedirectCardRow extends StatelessWidget {
+  final PhysicalCardModel card;
+  final CardRedirectModel? redirect;
+  final List<DigitalProfileModel> profiles;
+  final bool loading;
+  final VoidCallback onCreate;
+  final Future<void> Function(CardRedirectModel redirect) onSave;
+
+  const _RedirectCardRow({
+    required this.card,
+    required this.redirect,
+    required this.profiles,
+    required this.loading,
+    required this.onCreate,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final stacked = MediaQuery.sizeOf(context).width < 820;
+    DigitalProfileModel? activeProfile;
+    for (final profile in profiles) {
+      if (profile.id == card.activeProfileId) {
+        activeProfile = profile;
+        break;
+      }
+    }
+    final currentRedirect = redirect;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          card.productLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _CardStatusPill(status: card.status),
+        const SizedBox(height: 16),
+        Text(
+          activeProfile?.displayName ?? 'Sin perfil vinculado',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            color: context.muted,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    final redirectPanel = currentRedirect == null
+        ? _RedirectCreatePanel(loading: loading, onCreate: onCreate)
+        : _RedirectDetailsPanel(
+            redirect: currentRedirect,
+            loading: loading,
+            onSave: onSave,
+          );
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: stacked ? 0 : 16,
+        vertical: stacked ? 18 : 20,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: TaploeColors.border)),
+      ),
+      child: stacked
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CardProductImage(card: card),
+                const SizedBox(height: 18),
+                details,
+                const SizedBox(height: 18),
+                redirectPanel,
+              ],
+            )
+          : Row(
+              children: [
+                SizedBox(width: 220, child: _CardProductImage(card: card)),
+                const SizedBox(width: 18),
+                Expanded(flex: 3, child: details),
+                Container(
+                  width: 1,
+                  height: 158,
+                  margin: const EdgeInsets.symmetric(horizontal: 28),
+                  color: TaploeColors.border,
+                ),
+                Expanded(flex: 5, child: redirectPanel),
+              ],
+            ),
+    );
+  }
+}
+
+class _RedirectCreatePanel extends StatelessWidget {
+  final bool loading;
+  final VoidCallback onCreate;
+
+  const _RedirectCreatePanel({required this.loading, required this.onCreate});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Sin URL de redirección',
+          style: GoogleFonts.outfit(
+            color: context.text,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Genera una URL estable para esta tarjeta y cambia su destino cuando quieras.',
+          style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
+        ),
+        const SizedBox(height: 16),
+        TaploeButton(
+          width: 180,
+          label: 'Generar URL',
+          icon: Icons.add_link_rounded,
+          loading: loading,
+          onPressed: onCreate,
+        ),
+      ],
+    );
+  }
+}
+
+class _RedirectDetailsPanel extends StatelessWidget {
+  final CardRedirectModel redirect;
+  final bool loading;
+  final Future<void> Function(CardRedirectModel redirect) onSave;
+
+  const _RedirectDetailsPanel({
+    required this.redirect,
+    required this.loading,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _CardAccessLine(
+                icon: Icons.link_rounded,
+                title: 'URL genérica',
+                value: redirect.publicUrl,
+                onOpen: () => _openUrl(context, redirect.publicUrl),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copiar URL',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: redirect.publicUrl));
+                taploeToast(context, 'URL copiada.');
+              },
+              icon: const Icon(Icons.copy_rounded),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _RedirectDestinationLine(
+          redirect: redirect,
+          loading: loading,
+          onSave: onSave,
+        ),
+      ],
+    );
+  }
+}
+
+class _RedirectDestinationLine extends StatelessWidget {
+  final CardRedirectModel redirect;
+  final bool loading;
+  final Future<void> Function(CardRedirectModel redirect) onSave;
+
+  const _RedirectDestinationLine({
+    required this.redirect,
+    required this.loading,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          Icons.near_me_rounded,
+          color: redirect.isActive ? TaploeColors.success : context.muted,
+          size: 24,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                redirect.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: context.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                redirect.destinationUrl,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${redirect.clickCount} redirecciones',
+                style: GoogleFonts.dmSans(
+                  color: context.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+        Switch.adaptive(
+          value: redirect.isActive,
+          onChanged: loading
+              ? null
+              : (value) => onSave(
+                  CardRedirectModel(
+                    id: redirect.id,
+                    ownerUserId: redirect.ownerUserId,
+                    physicalCardId: redirect.physicalCardId,
+                    slug: redirect.slug,
+                    label: redirect.label,
+                    destinationUrl: redirect.destinationUrl,
+                    status: value ? 'active' : 'inactive',
+                    clickCount: redirect.clickCount,
+                    lastClickedAt: redirect.lastClickedAt,
+                    metadata: redirect.metadata,
+                    createdAt: redirect.createdAt,
+                    updatedAt: redirect.updatedAt,
+                  ),
+                ),
+        ),
+        IconButton(
+          tooltip: 'Editar destino',
+          onPressed: loading
+              ? null
+              : () => _showRedirectEditor(context, redirect, onSave),
+          icon: const Icon(Icons.edit_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _showRedirectEditor(
+  BuildContext context,
+  CardRedirectModel redirect,
+  Future<void> Function(CardRedirectModel redirect) onSave,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) =>
+        _RedirectEditorSheet(redirect: redirect, onSave: onSave),
+  );
+}
+
+class _RedirectEditorSheet extends StatefulWidget {
+  final CardRedirectModel redirect;
+  final Future<void> Function(CardRedirectModel redirect) onSave;
+
+  const _RedirectEditorSheet({required this.redirect, required this.onSave});
+
+  @override
+  State<_RedirectEditorSheet> createState() => _RedirectEditorSheetState();
+}
+
+class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
+  late final TextEditingController label;
+  late final TextEditingController destination;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    label = TextEditingController(text: widget.redirect.label);
+    destination = TextEditingController(text: widget.redirect.destinationUrl);
+  }
+
+  @override
+  void dispose() {
+    label.dispose();
+    destination.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final normalizedDestination = normalizeRedirectDestination(
+      destination.text,
+    );
+    if (!_isValidRedirectDestination(normalizedDestination)) {
+      taploeToast(context, 'Ingresa una URL válida.', error: true);
+      return;
+    }
+    if (_isTaploeRedirectLoop(normalizedDestination)) {
+      taploeToast(
+        context,
+        'No puedes redirigir una URL genérica a otra URL genérica.',
+        error: true,
+      );
+      return;
+    }
+    setState(() => saving = true);
+    await widget.onSave(
+      CardRedirectModel(
+        id: widget.redirect.id,
+        ownerUserId: widget.redirect.ownerUserId,
+        physicalCardId: widget.redirect.physicalCardId,
+        slug: widget.redirect.slug,
+        label: label.text.trim().isEmpty ? 'Card redirect' : label.text.trim(),
+        destinationUrl: normalizedDestination,
+        status: widget.redirect.status,
+        clickCount: widget.redirect.clickCount,
+        lastClickedAt: widget.redirect.lastClickedAt,
+        metadata: widget.redirect.metadata,
+        createdAt: widget.redirect.createdAt,
+        updatedAt: widget.redirect.updatedAt,
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        decoration: const BoxDecoration(
+          color: TaploeColors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Editar redirección',
+                      style: GoogleFonts.outfit(
+                        color: context.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TaploeTextField(
+                label: 'Nombre interno',
+                controller: label,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 14),
+              TaploeTextField(
+                label: 'Destino',
+                hint: 'https://example.com',
+                controller: destination,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _save(),
+              ),
+              const SizedBox(height: 18),
+              TaploeButton(
+                label: 'Guardar cambios',
+                icon: Icons.save_rounded,
+                loading: saving,
+                onPressed: _save,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+bool _isValidRedirectDestination(String value) {
+  final uri = Uri.tryParse(value);
+  return uri != null &&
+      (uri.scheme == 'http' || uri.scheme == 'https') &&
+      uri.host.trim().isNotEmpty;
+}
+
+bool _isTaploeRedirectLoop(String value) {
+  final uri = Uri.tryParse(value);
+  final base = Uri.tryParse(TaploeConfig.publicBaseUrl);
+  if (uri == null || base == null) return false;
+  return uri.host == base.host && uri.path.startsWith('/r/');
+}
+
+Future<void> _openUrl(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null ||
+      !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (context.mounted) {
+      taploeToast(context, 'No se pudo abrir el enlace.', error: true);
+    }
   }
 }
 

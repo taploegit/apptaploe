@@ -6,6 +6,7 @@ import 'views/activation_view.dart';
 import 'views/auth_views.dart';
 import 'views/dashboard_view.dart';
 import 'views/public_profile_view.dart';
+import 'views/redirect_resolver_view.dart';
 
 final taploeRouter = GoRouter(
   refreshListenable: taploeState,
@@ -17,6 +18,8 @@ final taploeRouter = GoRouter(
         path.startsWith('/p/') ||
         path == '/a' ||
         path.startsWith('/a/') ||
+        path == '/r' ||
+        path.startsWith('/r/') ||
         path.startsWith('/activate/');
     final authRoute =
         path == '/login' || path == '/otp' || path == '/auth-loading';
@@ -63,6 +66,11 @@ final taploeRouter = GoRouter(
       path: '/cards',
       builder: (context, state) =>
           const DashboardView(initialSection: DashboardSection.cards),
+    ),
+    GoRoute(
+      path: '/redirects',
+      builder: (context, state) =>
+          const DashboardView(initialSection: DashboardSection.redirects),
     ),
     GoRoute(
       path: '/share',
@@ -146,6 +154,12 @@ final taploeRouter = GoRouter(
       path: '/p/:slug',
       builder: (_, state) {
         return PublicProfileView(slug: state.pathParameters['slug']!);
+      },
+    ),
+    GoRoute(
+      path: '/r/:slug',
+      builder: (_, state) {
+        return RedirectResolverView(slug: state.pathParameters['slug']!);
       },
     ),
   ],

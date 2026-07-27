@@ -1562,6 +1562,114 @@ class AccessPointRepository {
   }
 }
 
+class CardRedirectRepository {
+  static Future<List<CardRedirectModel>> fetchForUser(String userId) async {
+    try {
+      final rows = await _db
+          .from('card_redirects')
+          .select()
+          .eq('owner_user_id', userId)
+          .order('created_at', ascending: false);
+      return (rows as List)
+          .map((e) => CardRedirectModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (error) {
+      debugPrint('[TaploeRedirects] No se pudieron cargar redirects.');
+      safePrintError(error);
+      return const [];
+    }
+  }
+
+  static Future<CardRedirectModel?> fetchForCard(String physicalCardId) async {
+    final row = await _db
+        .from('card_redirects')
+        .select()
+        .eq('physical_card_id', physicalCardId)
+        .maybeSingle();
+    if (row == null) return null;
+    return CardRedirectModel.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  static Future<CardRedirectModel?> resolve(String slug) async {
+    final rows = await _db.rpc(
+      'resolve_card_redirect',
+      params: {'p_slug': normalizePublicSlug(slug)},
+    );
+    final list = rows is List ? rows : const [];
+    if (list.isEmpty) return null;
+    return CardRedirectModel.fromJson(Map<String, dynamic>.from(list.first));
+  }
+
+  static Future<void> trackClick({
+    required String redirectId,
+    String? userAgent,
+    String? referrer,
+  }) async {
+    await _db.rpc(
+      'track_card_redirect_click',
+      params: {
+        'p_redirect_id': redirectId,
+        'p_user_agent': userAgent,
+        'p_referrer': referrer,
+      },
+    );
+  }
+
+  static Future<CardRedirectModel> create({
+    required String ownerUserId,
+    required String physicalCardId,
+    required String label,
+    required String destinationUrl,
+    String? preferredSlug,
+  }) async {
+    final baseSlug = normalizePublicSlug(
+      preferredSlug?.trim().isNotEmpty == true
+          ? preferredSlug!
+          : 'card-$physicalCardId',
+    );
+    final row = await _db
+        .from('card_redirects')
+        .insert({
+          'owner_user_id': ownerUserId,
+          'physical_card_id': physicalCardId,
+          'slug': baseSlug.length >= 3 ? baseSlug : slugify(label),
+          'label': label.trim().isEmpty ? 'Card redirect' : label.trim(),
+          'destination_url': normalizeRedirectDestination(destinationUrl),
+          'status': 'active',
+        })
+        .select()
+        .single();
+    return CardRedirectModel.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  static Future<CardRedirectModel> save(CardRedirectModel redirect) async {
+    final row = await _db
+        .from('card_redirects')
+        .update({
+          'label': redirect.label.trim().isEmpty
+              ? 'Card redirect'
+              : redirect.label.trim(),
+          'destination_url': normalizeRedirectDestination(
+            redirect.destinationUrl,
+          ),
+          'status': redirect.isActive ? 'active' : 'inactive',
+          'updated_at': nowIso(),
+        })
+        .eq('id', redirect.id)
+        .select()
+        .single();
+    return CardRedirectModel.fromJson(Map<String, dynamic>.from(row));
+  }
+}
+
+String normalizeRedirectDestination(String value) {
+  final clean = value.trim();
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return clean;
+  }
+  return 'https://$clean';
+}
+
 class CardRepository {
   static Future<ProfileAccessPointModel?> fetchAccessPoint(String token) {
     return AccessPointRepository.fetchByToken(token);
