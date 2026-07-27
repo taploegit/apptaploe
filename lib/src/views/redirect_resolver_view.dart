@@ -66,7 +66,13 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
 
   @override
   Widget build(BuildContext context) {
-    final message = failed ? 'This redirect is unavailable.' : 'Redirecting...';
+    final t = TaploeTextScope.of(context);
+    final message = failed
+        ? t.text(
+            'Esta redirección no está disponible.',
+            'This redirect is unavailable.',
+          )
+        : t.text('Redirigiendo...', 'Redirecting...');
     return Scaffold(
       backgroundColor: TaploeColors.white,
       body: Center(
@@ -77,8 +83,18 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const TaploeLogo(size: 48, centered: true),
-                const SizedBox(height: 34),
+                Image.asset(
+                  'assets/images/google.png',
+                  width: 82,
+                  height: 82,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.public_rounded,
+                    color: TaploeColors.blue,
+                    size: 62,
+                  ),
+                ),
+                const SizedBox(height: 28),
                 if (loading && !failed) ...[
                   const CircularProgressIndicator(),
                   const SizedBox(height: 24),
