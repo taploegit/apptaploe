@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Text;
 import 'package:google_fonts/google_fonts.dart';
 
@@ -17,15 +19,27 @@ class RedirectResolverView extends StatefulWidget {
   State<RedirectResolverView> createState() => _RedirectResolverViewState();
 }
 
-class _RedirectResolverViewState extends State<RedirectResolverView> {
+class _RedirectResolverViewState extends State<RedirectResolverView>
+    with SingleTickerProviderStateMixin {
   bool loading = true;
   bool failed = false;
   String? destinationUrl;
+  late final AnimationController _spinnerController;
 
   @override
   void initState() {
     super.initState();
+    _spinnerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
     _resolve();
+  }
+
+  @override
+  void dispose() {
+    _spinnerController.dispose();
+    super.dispose();
   }
 
   Future<void> _resolve() async {
@@ -85,18 +99,18 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
               children: [
                 Image.asset(
                   'assets/images/google.png',
-                  width: 82,
-                  height: 82,
+                  width: 178,
+                  height: 74,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) => const Icon(
                     Icons.public_rounded,
                     color: TaploeColors.blue,
-                    size: 62,
+                    size: 74,
                   ),
                 ),
                 const SizedBox(height: 28),
                 if (loading && !failed) ...[
-                  const CircularProgressIndicator(),
+                  _GoogleProgressIndicator(animation: _spinnerController),
                   const SizedBox(height: 24),
                 ] else
                   const Icon(
@@ -130,4 +144,61 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
       ),
     );
   }
+}
+
+class _GoogleProgressIndicator extends StatelessWidget {
+  final Animation<double> animation;
+
+  const _GoogleProgressIndicator({required this.animation});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 46,
+      child: AnimatedBuilder(
+        animation: animation,
+        builder: (context, child) {
+          return Transform.rotate(
+            angle: animation.value * math.pi * 2,
+            child: const CustomPaint(painter: _GoogleProgressPainter()),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _GoogleProgressPainter extends CustomPainter {
+  const _GoogleProgressPainter();
+
+  static const _colors = [
+    Color(0xFF4285F4),
+    Color(0xFFEA4335),
+    Color(0xFFFBBC05),
+    Color(0xFF34A853),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeWidth = size.shortestSide * 0.1;
+    final rect = Offset.zero & size;
+    final arcRect = rect.deflate(strokeWidth / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    const gap = math.pi / 22;
+    final sweep = (math.pi * 2 - gap * _colors.length) / _colors.length;
+    var startAngle = -math.pi / 2;
+
+    for (final color in _colors) {
+      paint.color = color;
+      canvas.drawArc(arcRect, startAngle, sweep, false, paint);
+      startAngle += sweep + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoogleProgressPainter oldDelegate) => false;
 }
