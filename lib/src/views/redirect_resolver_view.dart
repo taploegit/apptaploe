@@ -31,7 +31,8 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
   Future<void> _resolve() async {
     try {
       final redirect = await CardRedirectRepository.resolve(widget.slug);
-      if (redirect == null || redirect.destinationUrl.trim().isEmpty) {
+      final destination = redirect?.destinationUrl?.trim();
+      if (redirect == null || destination == null || destination.isEmpty) {
         if (mounted) {
           setState(() {
             loading = false;
@@ -41,10 +42,10 @@ class _RedirectResolverViewState extends State<RedirectResolverView> {
         return;
       }
 
-      destinationUrl = redirect.destinationUrl;
+      destinationUrl = destination;
       await CardRedirectRepository.trackClick(redirectId: redirect.id);
 
-      final uri = Uri.tryParse(redirect.destinationUrl);
+      final uri = Uri.tryParse(destination);
       if (uri == null ||
           !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         if (mounted) {

@@ -1580,16 +1580,6 @@ class CardRedirectRepository {
     }
   }
 
-  static Future<CardRedirectModel?> fetchForCard(String physicalCardId) async {
-    final row = await _db
-        .from('card_redirects')
-        .select()
-        .eq('physical_card_id', physicalCardId)
-        .maybeSingle();
-    if (row == null) return null;
-    return CardRedirectModel.fromJson(Map<String, dynamic>.from(row));
-  }
-
   static Future<CardRedirectModel?> resolve(String slug) async {
     final rows = await _db.rpc(
       'resolve_card_redirect',
@@ -1615,27 +1605,41 @@ class CardRedirectRepository {
     );
   }
 
+  static Future<CardRedirectModel?> claim(String slugOrUrl) async {
+    final rows = await _db.rpc(
+      'claim_card_redirect',
+      params: {'p_slug': redirectSlugFromInput(slugOrUrl)},
+    );
+    final list = rows is List ? rows : const [];
+    if (list.isEmpty) return null;
+    return CardRedirectModel.fromJson(Map<String, dynamic>.from(list.first));
+  }
+
   static Future<CardRedirectModel> create({
     required String ownerUserId,
-    required String physicalCardId,
-    required String label,
-    required String destinationUrl,
+    String? label,
+    String? destinationUrl,
     String? preferredSlug,
   }) async {
     final baseSlug = normalizePublicSlug(
-      preferredSlug?.trim().isNotEmpty == true
-          ? preferredSlug!
-          : 'card-$physicalCardId',
+      preferredSlug?.trim().isNotEmpty == true ? preferredSlug! : _redirectId(),
+    );
+    final cleanDestination = normalizeRedirectDestinationOrNull(
+      destinationUrl ?? '',
     );
     final row = await _db
         .from('card_redirects')
         .insert({
           'owner_user_id': ownerUserId,
-          'physical_card_id': physicalCardId,
-          'slug': baseSlug.length >= 3 ? baseSlug : slugify(label),
-          'label': label.trim().isEmpty ? 'Card redirect' : label.trim(),
-          'destination_url': normalizeRedirectDestination(destinationUrl),
-          'status': 'active',
+          'slug': baseSlug.length >= 3
+              ? baseSlug
+              : slugify(label ?? 'card redirect'),
+          'label': label?.trim().isNotEmpty == true
+              ? label!.trim()
+              : 'Card redirect',
+          'destination_url': cleanDestination,
+          'status': cleanDestination == null ? 'draft' : 'active',
+          'claimed_at': nowIso(),
         })
         .select()
         .single();
@@ -1643,16 +1647,22 @@ class CardRedirectRepository {
   }
 
   static Future<CardRedirectModel> save(CardRedirectModel redirect) async {
+    final cleanDestination = normalizeRedirectDestinationOrNull(
+      redirect.destinationUrl ?? '',
+    );
+    final status = cleanDestination == null
+        ? 'draft'
+        : redirect.status == 'inactive'
+        ? 'inactive'
+        : 'active';
     final row = await _db
         .from('card_redirects')
         .update({
           'label': redirect.label.trim().isEmpty
               ? 'Card redirect'
               : redirect.label.trim(),
-          'destination_url': normalizeRedirectDestination(
-            redirect.destinationUrl,
-          ),
-          'status': redirect.isActive ? 'active' : 'inactive',
+          'destination_url': cleanDestination,
+          'status': status,
           'updated_at': nowIso(),
         })
         .eq('id', redirect.id)
@@ -1660,6 +1670,27 @@ class CardRedirectRepository {
         .single();
     return CardRedirectModel.fromJson(Map<String, dynamic>.from(row));
   }
+}
+
+String _redirectId() =>
+    'card-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+
+String redirectSlugFromInput(String value) {
+  final trimmed = value.trim();
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && uri.pathSegments.isNotEmpty) {
+    final index = uri.pathSegments.indexOf('r');
+    if (index >= 0 && uri.pathSegments.length > index + 1) {
+      return normalizePublicSlug(uri.pathSegments[index + 1]);
+    }
+  }
+  return normalizePublicSlug(trimmed.split('/').last);
+}
+
+String? normalizeRedirectDestinationOrNull(String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return null;
+  return normalizeRedirectDestination(clean);
 }
 
 String normalizeRedirectDestination(String value) {

@@ -17654,28 +17654,47 @@ class RedirectManagerView extends StatefulWidget {
 class _RedirectManagerViewState extends State<RedirectManagerView> {
   bool loading = false;
 
-  Future<void> _createForCard(PhysicalCardModel card) async {
+  Future<void> _create({String? label, String? destinationUrl}) async {
     final user = taploeState.currentUser;
     if (user == null) return;
-    final destination = _defaultRedirectDestination(card);
     setState(() => loading = true);
     try {
       await CardRedirectRepository.create(
         ownerUserId: user.id,
-        physicalCardId: card.id,
-        label: card.printedName?.trim().isNotEmpty == true
-            ? '${card.printedName} redirect'
-            : '${card.productLabel} redirect',
-        destinationUrl: destination,
-        preferredSlug: 'card-${card.serialNumber}',
+        label: label,
+        destinationUrl: destinationUrl,
       );
       await taploeState.refreshCardRedirects();
       if (!mounted) return;
-      taploeToast(context, 'URL de redirección creada.');
+      taploeToast(context, 'URL generada.');
     } catch (error) {
       safePrintError(error);
       if (!mounted) return;
-      taploeToast(context, 'No pudimos crear la redirección.', error: true);
+      taploeToast(context, 'No pudimos generar la URL.', error: true);
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _claim(String value) async {
+    setState(() => loading = true);
+    try {
+      final redirect = await CardRedirectRepository.claim(value);
+      await taploeState.refreshCardRedirects();
+      if (!mounted) return;
+      if (redirect == null) {
+        taploeToast(
+          context,
+          'No encontramos una URL disponible para vincular.',
+          error: true,
+        );
+        return;
+      }
+      taploeToast(context, 'URL vinculada.');
+    } catch (error) {
+      safePrintError(error);
+      if (!mounted) return;
+      taploeToast(context, 'No pudimos vincular la URL.', error: true);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -17701,24 +17720,9 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
     }
   }
 
-  String _defaultRedirectDestination(PhysicalCardModel card) {
-    for (final profile in taploeState.profiles) {
-      if (profile.id == card.activeProfileId) {
-        return TaploeConfig.profileUrl(profile.publicSlug);
-      }
-    }
-    final active = taploeState.activeProfile;
-    if (active != null) return TaploeConfig.profileUrl(active.publicSlug);
-    return TaploeConfig.publicBaseUrl;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cards = taploeState.cards;
     final redirects = taploeState.cardRedirects;
-    final redirectsByCard = {
-      for (final redirect in redirects) redirect.physicalCardId: redirect,
-    };
     final activeRedirects = redirects.where((item) => item.isActive).length;
     final totalClicks = redirects.fold<int>(
       0,
@@ -17727,14 +17731,23 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
 
     return PageShell(
       title: 'Redirección',
-      subtitle: 'Configura URLs genéricas por tarjeta y cambia su destino.',
+      subtitle: 'Genera URLs programables y cambia su destino cuando quieras.',
       actions: [
         TaploeButton(
-          width: 190,
-          label: 'Vincular tarjeta',
-          icon: Icons.add_rounded,
+          width: 170,
+          label: 'Vincular URL',
+          icon: Icons.link_rounded,
           kind: TaploeButtonKind.secondary,
-          onPressed: () => _showCardLinkingDialog(context),
+          onPressed: loading
+              ? null
+              : () => _showClaimRedirectSheet(context, onClaim: _claim),
+        ),
+        TaploeButton(
+          width: 170,
+          label: 'Generar URL',
+          icon: Icons.add_link_rounded,
+          loading: loading,
+          onPressed: () => _showCreateRedirectSheet(context, onCreate: _create),
         ),
       ],
       child: Column(
@@ -17781,18 +17794,15 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
           const SizedBox(height: 24),
           Divider(color: TaploeColors.border),
           const SizedBox(height: 18),
-          if (cards.isEmpty)
+          if (redirects.isEmpty)
             const _RedirectsEmptyState()
           else
-            ...cards.map(
-              (card) => Padding(
+            ...redirects.map(
+              (redirect) => Padding(
                 padding: const EdgeInsets.only(bottom: 18),
-                child: _RedirectCardRow(
-                  card: card,
-                  redirect: redirectsByCard[card.id],
-                  profiles: taploeState.profiles,
+                child: _RedirectRow(
+                  redirect: redirect,
                   loading: loading,
-                  onCreate: () => _createForCard(card),
                   onSave: _save,
                 ),
               ),
@@ -17824,7 +17834,7 @@ class _RedirectsEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Vincula una tarjeta para crear su URL genérica.',
+            'Genera tu primera URL programable.',
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               color: context.text,
@@ -17834,7 +17844,7 @@ class _RedirectsEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Cada tarjeta podrá tener una URL estable que redirige al destino que configures.',
+            'Puedes grabarla en una tarjeta NFC o imprimirla en QR y cambiar el destino después.',
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
           ),
@@ -17844,139 +17854,120 @@ class _RedirectsEmptyState extends StatelessWidget {
   }
 }
 
-class _RedirectCardRow extends StatelessWidget {
-  final PhysicalCardModel card;
-  final CardRedirectModel? redirect;
-  final List<DigitalProfileModel> profiles;
+class _RedirectRow extends StatelessWidget {
+  final CardRedirectModel redirect;
   final bool loading;
-  final VoidCallback onCreate;
   final Future<void> Function(CardRedirectModel redirect) onSave;
 
-  const _RedirectCardRow({
-    required this.card,
+  const _RedirectRow({
     required this.redirect,
-    required this.profiles,
     required this.loading,
-    required this.onCreate,
     required this.onSave,
   });
 
   @override
   Widget build(BuildContext context) {
-    final stacked = MediaQuery.sizeOf(context).width < 820;
-    DigitalProfileModel? activeProfile;
-    for (final profile in profiles) {
-      if (profile.id == card.activeProfileId) {
-        activeProfile = profile;
-        break;
-      }
-    }
-    final currentRedirect = redirect;
-    final details = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          card.productLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.outfit(
-            color: context.text,
-            fontSize: 21,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _CardStatusPill(status: card.status),
-        const SizedBox(height: 16),
-        Text(
-          activeProfile?.displayName ?? 'Sin perfil vinculado',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.dmSans(
-            color: context.muted,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-    final redirectPanel = currentRedirect == null
-        ? _RedirectCreatePanel(loading: loading, onCreate: onCreate)
-        : _RedirectDetailsPanel(
-            redirect: currentRedirect,
-            loading: loading,
-            onSave: onSave,
-          );
-
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: stacked ? 0 : 16,
-        vertical: stacked ? 18 : 20,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: TaploeColors.border)),
       ),
-      child: stacked
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _CardProductImage(card: card),
-                const SizedBox(height: 18),
-                details,
-                const SizedBox(height: 18),
-                redirectPanel,
-              ],
-            )
-          : Row(
-              children: [
-                SizedBox(width: 220, child: _CardProductImage(card: card)),
-                const SizedBox(width: 18),
-                Expanded(flex: 3, child: details),
-                Container(
-                  width: 1,
-                  height: 158,
-                  margin: const EdgeInsets.symmetric(horizontal: 28),
-                  color: TaploeColors.border,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked = constraints.maxWidth < 760;
+          final header = Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: TaploeColors.blue.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                Expanded(flex: 5, child: redirectPanel),
-              ],
-            ),
+                child: const Icon(
+                  Icons.alt_route_rounded,
+                  color: TaploeColors.blue,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      redirect.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        color: context.text,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _RedirectStatusPill(redirect: redirect),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final details = _RedirectDetailsPanel(
+            redirect: redirect,
+            loading: loading,
+            onSave: onSave,
+          );
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [header, const SizedBox(height: 18), details],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: header),
+              const SizedBox(width: 26),
+              Expanded(flex: 5, child: details),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
-class _RedirectCreatePanel extends StatelessWidget {
-  final bool loading;
-  final VoidCallback onCreate;
+class _RedirectStatusPill extends StatelessWidget {
+  final CardRedirectModel redirect;
 
-  const _RedirectCreatePanel({required this.loading, required this.onCreate});
+  const _RedirectStatusPill({required this.redirect});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Sin URL de redirección',
-          style: GoogleFonts.outfit(
-            color: context.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
+    final active = redirect.isActive;
+    final label = redirect.status == 'draft'
+        ? 'Sin destino'
+        : active
+        ? 'Activa'
+        : 'Inactiva';
+    final color = active
+        ? TaploeColors.success
+        : redirect.status == 'draft'
+        ? TaploeColors.blue
+        : context.muted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Genera una URL estable para esta tarjeta y cambia su destino cuando quieras.',
-          style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
-        ),
-        const SizedBox(height: 16),
-        TaploeButton(
-          width: 180,
-          label: 'Generar URL',
-          icon: Icons.add_link_rounded,
-          loading: loading,
-          onPressed: onCreate,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -17994,6 +17985,7 @@ class _RedirectDetailsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final destination = redirect.destinationUrl?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -18018,101 +18010,203 @@ class _RedirectDetailsPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _RedirectDestinationLine(
-          redirect: redirect,
-          loading: loading,
-          onSave: onSave,
+        Row(
+          children: [
+            Icon(
+              Icons.near_me_rounded,
+              color: redirect.isActive ? TaploeColors.success : context.muted,
+              size: 24,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Destino',
+                    style: GoogleFonts.dmSans(
+                      color: context.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    destination?.isNotEmpty == true
+                        ? destination!
+                        : 'Configura un destino para activar esta URL.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${redirect.clickCount} redirecciones',
+                    style: GoogleFonts.dmSans(
+                      color: context.muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Switch.adaptive(
+              value: redirect.isActive,
+              onChanged: loading || !redirect.hasDestination
+                  ? null
+                  : (value) => onSave(_copyRedirect(redirect, active: value)),
+            ),
+            IconButton(
+              tooltip: 'Editar destino',
+              onPressed: loading
+                  ? null
+                  : () => _showRedirectEditor(context, redirect, onSave),
+              icon: const Icon(Icons.edit_rounded),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _RedirectDestinationLine extends StatelessWidget {
-  final CardRedirectModel redirect;
-  final bool loading;
-  final Future<void> Function(CardRedirectModel redirect) onSave;
+class _CreateRedirectSheet extends StatefulWidget {
+  final Future<void> Function({String? label, String? destinationUrl}) onCreate;
 
-  const _RedirectDestinationLine({
-    required this.redirect,
-    required this.loading,
-    required this.onSave,
-  });
+  const _CreateRedirectSheet({required this.onCreate});
+
+  @override
+  State<_CreateRedirectSheet> createState() => _CreateRedirectSheetState();
+}
+
+class _CreateRedirectSheetState extends State<_CreateRedirectSheet> {
+  late final TextEditingController label;
+  late final TextEditingController destination;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    label = TextEditingController(text: 'Card redirect');
+    destination = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    label.dispose();
+    destination.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final normalizedDestination = normalizeRedirectDestinationOrNull(
+      destination.text,
+    );
+    if (normalizedDestination != null &&
+        !_isValidRedirectDestination(normalizedDestination)) {
+      taploeToast(context, 'Ingresa una URL válida.', error: true);
+      return;
+    }
+    if (normalizedDestination != null &&
+        _isTaploeRedirectLoop(normalizedDestination)) {
+      taploeToast(
+        context,
+        'No puedes redirigir una URL genérica a otra URL genérica.',
+        error: true,
+      );
+      return;
+    }
+    setState(() => saving = true);
+    await widget.onCreate(
+      label: label.text,
+      destinationUrl: normalizedDestination,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return _RedirectBottomSheet(
+      title: 'Generar URL',
+      actionLabel: 'Generar URL',
+      loading: saving,
+      onSubmit: _create,
       children: [
-        Icon(
-          Icons.near_me_rounded,
-          color: redirect.isActive ? TaploeColors.success : context.muted,
-          size: 24,
+        TaploeTextField(
+          label: 'Nombre interno',
+          controller: label,
+          textInputAction: TextInputAction.next,
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                redirect.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: context.text,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                redirect.destinationUrl,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: context.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${redirect.clickCount} redirecciones',
-                style: GoogleFonts.dmSans(
-                  color: context.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(height: 14),
+        TaploeTextField(
+          label: 'Destino',
+          hint: 'https://example.com',
+          helperText: 'Puedes dejarlo vacío y configurarlo después.',
+          controller: destination,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _create(),
         ),
-        const SizedBox(width: 14),
-        Switch.adaptive(
-          value: redirect.isActive,
-          onChanged: loading
-              ? null
-              : (value) => onSave(
-                  CardRedirectModel(
-                    id: redirect.id,
-                    ownerUserId: redirect.ownerUserId,
-                    physicalCardId: redirect.physicalCardId,
-                    slug: redirect.slug,
-                    label: redirect.label,
-                    destinationUrl: redirect.destinationUrl,
-                    status: value ? 'active' : 'inactive',
-                    clickCount: redirect.clickCount,
-                    lastClickedAt: redirect.lastClickedAt,
-                    metadata: redirect.metadata,
-                    createdAt: redirect.createdAt,
-                    updatedAt: redirect.updatedAt,
-                  ),
-                ),
-        ),
-        IconButton(
-          tooltip: 'Editar destino',
-          onPressed: loading
-              ? null
-              : () => _showRedirectEditor(context, redirect, onSave),
-          icon: const Icon(Icons.edit_rounded),
+      ],
+    );
+  }
+}
+
+class _ClaimRedirectSheet extends StatefulWidget {
+  final Future<void> Function(String value) onClaim;
+
+  const _ClaimRedirectSheet({required this.onClaim});
+
+  @override
+  State<_ClaimRedirectSheet> createState() => _ClaimRedirectSheetState();
+}
+
+class _ClaimRedirectSheetState extends State<_ClaimRedirectSheet> {
+  late final TextEditingController url;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    url = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    url.dispose();
+    super.dispose();
+  }
+
+  Future<void> _claim() async {
+    if (redirectSlugFromInput(url.text).length < 3) {
+      taploeToast(context, 'Ingresa una URL válida.', error: true);
+      return;
+    }
+    setState(() => saving = true);
+    await widget.onClaim(url.text);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _RedirectBottomSheet(
+      title: 'Vincular URL',
+      actionLabel: 'Vincular URL',
+      loading: saving,
+      onSubmit: _claim,
+      children: [
+        TaploeTextField(
+          label: 'URL o código',
+          hint: 'https://app.taploe.com/r/card-xxxxxx',
+          controller: url,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _claim(),
         ),
       ],
     );
@@ -18130,6 +18224,31 @@ Future<void> _showRedirectEditor(
     backgroundColor: Colors.transparent,
     builder: (context) =>
         _RedirectEditorSheet(redirect: redirect, onSave: onSave),
+  );
+}
+
+Future<void> _showCreateRedirectSheet(
+  BuildContext context, {
+  required Future<void> Function({String? label, String? destinationUrl})
+  onCreate,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => _CreateRedirectSheet(onCreate: onCreate),
+  );
+}
+
+Future<void> _showClaimRedirectSheet(
+  BuildContext context, {
+  required Future<void> Function(String value) onClaim,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => _ClaimRedirectSheet(onClaim: onClaim),
   );
 }
 
@@ -18152,7 +18271,9 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
   void initState() {
     super.initState();
     label = TextEditingController(text: widget.redirect.label);
-    destination = TextEditingController(text: widget.redirect.destinationUrl);
+    destination = TextEditingController(
+      text: widget.redirect.destinationUrl ?? '',
+    );
   }
 
   @override
@@ -18163,10 +18284,11 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
   }
 
   Future<void> _save() async {
-    final normalizedDestination = normalizeRedirectDestination(
+    final normalizedDestination = normalizeRedirectDestinationOrNull(
       destination.text,
     );
-    if (!_isValidRedirectDestination(normalizedDestination)) {
+    if (normalizedDestination == null ||
+        !_isValidRedirectDestination(normalizedDestination)) {
       taploeToast(context, 'Ingresa una URL válida.', error: true);
       return;
     }
@@ -18183,13 +18305,13 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
       CardRedirectModel(
         id: widget.redirect.id,
         ownerUserId: widget.redirect.ownerUserId,
-        physicalCardId: widget.redirect.physicalCardId,
         slug: widget.redirect.slug,
         label: label.text.trim().isEmpty ? 'Card redirect' : label.text.trim(),
         destinationUrl: normalizedDestination,
-        status: widget.redirect.status,
+        status: widget.redirect.status == 'inactive' ? 'inactive' : 'active',
         clickCount: widget.redirect.clickCount,
         lastClickedAt: widget.redirect.lastClickedAt,
+        claimedAt: widget.redirect.claimedAt,
         metadata: widget.redirect.metadata,
         createdAt: widget.redirect.createdAt,
         updatedAt: widget.redirect.updatedAt,
@@ -18197,6 +18319,48 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
     );
     if (mounted) Navigator.of(context).pop();
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return _RedirectBottomSheet(
+      title: 'Editar redirección',
+      actionLabel: 'Guardar cambios',
+      loading: saving,
+      onSubmit: _save,
+      children: [
+        TaploeTextField(
+          label: 'Nombre interno',
+          controller: label,
+          textInputAction: TextInputAction.next,
+        ),
+        const SizedBox(height: 14),
+        TaploeTextField(
+          label: 'Destino',
+          hint: 'https://example.com',
+          controller: destination,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _save(),
+        ),
+      ],
+    );
+  }
+}
+
+class _RedirectBottomSheet extends StatelessWidget {
+  final String title;
+  final String actionLabel;
+  final List<Widget> children;
+  final bool loading;
+  final VoidCallback onSubmit;
+
+  const _RedirectBottomSheet({
+    required this.title,
+    required this.actionLabel,
+    required this.children,
+    required this.loading,
+    required this.onSubmit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18219,7 +18383,7 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Editar redirección',
+                      title,
                       style: GoogleFonts.outfit(
                         color: context.text,
                         fontSize: 22,
@@ -18235,26 +18399,13 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
                 ],
               ),
               const SizedBox(height: 16),
-              TaploeTextField(
-                label: 'Nombre interno',
-                controller: label,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 14),
-              TaploeTextField(
-                label: 'Destino',
-                hint: 'https://example.com',
-                controller: destination,
-                keyboardType: TextInputType.url,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _save(),
-              ),
+              ...children,
               const SizedBox(height: 18),
               TaploeButton(
-                label: 'Guardar cambios',
+                label: actionLabel,
                 icon: Icons.save_rounded,
-                loading: saving,
-                onPressed: _save,
+                loading: loading,
+                onPressed: onSubmit,
               ),
             ],
           ),
@@ -18262,6 +18413,34 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
       ),
     );
   }
+}
+
+CardRedirectModel _copyRedirect(
+  CardRedirectModel redirect, {
+  bool? active,
+  String? label,
+  String? destinationUrl,
+}) {
+  final cleanDestination = destinationUrl ?? redirect.destinationUrl?.trim();
+  final hasDestination = cleanDestination?.isNotEmpty == true;
+  final shouldBeActive = active ?? redirect.status != 'inactive';
+  final nextStatus = hasDestination
+      ? (shouldBeActive ? 'active' : 'inactive')
+      : 'draft';
+  return CardRedirectModel(
+    id: redirect.id,
+    ownerUserId: redirect.ownerUserId,
+    slug: redirect.slug,
+    label: label ?? redirect.label,
+    destinationUrl: cleanDestination,
+    status: nextStatus,
+    clickCount: redirect.clickCount,
+    lastClickedAt: redirect.lastClickedAt,
+    claimedAt: redirect.claimedAt,
+    metadata: redirect.metadata,
+    createdAt: redirect.createdAt,
+    updatedAt: redirect.updatedAt,
+  );
 }
 
 bool _isValidRedirectDestination(String value) {

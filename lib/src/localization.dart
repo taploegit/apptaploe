@@ -376,6 +376,10 @@ const Map<String, String> _taploeEnglishPhrases = {
   'URLs creadas': 'URLs created',
   'Redirecciones': 'Redirects',
   'URL genérica': 'Generic URL',
+  'URL o código': 'URL or code',
+  'URL generada.': 'URL generated.',
+  'URL vinculada.': 'URL linked.',
+  'Vincular URL': 'Link URL',
   'Sin URL de redirección': 'No redirect URL',
   'Generar URL': 'Generate URL',
   'Editar redirección': 'Edit redirect',
@@ -383,21 +387,26 @@ const Map<String, String> _taploeEnglishPhrases = {
   'Destino': 'Destination',
   'Nombre interno': 'Internal name',
   'Copiar URL': 'Copy URL',
-  'URL de redirección creada.': 'Redirect URL created.',
   'Redirección actualizada.': 'Redirect updated.',
-  'No pudimos crear la redirección.': 'We could not create the redirect.',
+  'No pudimos generar la URL.': 'We could not generate the URL.',
+  'No pudimos vincular la URL.': 'We could not link the URL.',
+  'No encontramos una URL disponible para vincular.':
+      'We could not find an available URL to link.',
   'No pudimos actualizar la redirección.': 'We could not update the redirect.',
   'Ingresa una URL válida.': 'Enter a valid URL.',
   'No puedes redirigir una URL genérica a otra URL genérica.':
       'You cannot redirect a generic URL to another generic URL.',
-  'Configura URLs genéricas por tarjeta y cambia su destino.':
-      'Configure generic URLs per card and change their destination.',
-  'Genera una URL estable para esta tarjeta y cambia su destino cuando quieras.':
-      'Generate a stable URL for this card and change its destination anytime.',
-  'Vincula una tarjeta para crear su URL genérica.':
-      'Link a card to create its generic URL.',
-  'Cada tarjeta podrá tener una URL estable que redirige al destino que configures.':
-      'Each card can have a stable URL that redirects to the destination you configure.',
+  'Genera URLs programables y cambia su destino cuando quieras.':
+      'Generate programmable URLs and change their destination anytime.',
+  'Genera tu primera URL programable.': 'Generate your first programmable URL.',
+  'Puedes grabarla en una tarjeta NFC o imprimirla en QR y cambiar el destino después.':
+      'You can write it to an NFC card or print it as a QR and change the destination later.',
+  'Configura un destino para activar esta URL.':
+      'Configure a destination to activate this URL.',
+  'Puedes dejarlo vacío y configurarlo después.':
+      'You can leave it empty and configure it later.',
+  'Sin destino': 'No destination',
+  'Inactiva': 'Inactive',
   'Sin perfil vinculado': 'No linked profile',
   'Cambiar perfil': 'Change profile',
   'Crear nuevo perfil': 'Create new profile',
