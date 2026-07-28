@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 import 'package:google_fonts/google_fonts.dart';
 
+import '../config.dart';
 import '../localized_text.dart';
 import '../redirect_navigation.dart';
 import '../repositories.dart';
@@ -81,6 +82,7 @@ class _RedirectResolverViewState extends State<RedirectResolverView>
   @override
   Widget build(BuildContext context) {
     final t = TaploeTextScope.of(context);
+    final failedRedirectUrl = TaploeConfig.redirectUrl(widget.slug);
     final message = failed
         ? t.text(
             'Esta redirección no está disponible.',
@@ -127,6 +129,21 @@ class _RedirectResolverViewState extends State<RedirectResolverView>
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (failed) ...[
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    t.text(
+                      'Ruta: $failedRedirectUrl',
+                      'Route: $failedRedirectUrl',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      color: TaploeColors.muted,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
                 if (failed && destinationUrl != null) ...[
                   const SizedBox(height: 18),
                   TaploeButton(
