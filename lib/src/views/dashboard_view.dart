@@ -18409,12 +18409,13 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
     final normalizedDestination = normalizeRedirectDestinationOrNull(
       destination.text,
     );
-    if (normalizedDestination == null ||
+    if (normalizedDestination != null &&
         !_isValidRedirectDestination(normalizedDestination)) {
       taploeToast(context, 'Ingresa una URL válida.', error: true);
       return;
     }
-    if (_isTaploeRedirectLoop(normalizedDestination)) {
+    if (normalizedDestination != null &&
+        _isTaploeRedirectLoop(normalizedDestination)) {
       taploeToast(
         context,
         'No puedes redirigir una URL genérica a otra URL genérica.',
@@ -18432,7 +18433,11 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
             ? 'Taploe redirect card'
             : label.text.trim(),
         destinationUrl: normalizedDestination,
-        status: widget.redirect.status == 'inactive' ? 'inactive' : 'active',
+        status: normalizedDestination == null
+            ? 'draft'
+            : widget.redirect.status == 'inactive'
+            ? 'inactive'
+            : 'active',
         clickCount: widget.redirect.clickCount,
         lastClickedAt: widget.redirect.lastClickedAt,
         claimedAt: widget.redirect.claimedAt,
@@ -18461,6 +18466,7 @@ class _RedirectEditorSheetState extends State<_RedirectEditorSheet> {
         TaploeTextField(
           label: 'Destino',
           hint: 'https://example.com',
+          helperText: 'Puedes dejarlo vacío y configurarlo después.',
           controller: destination,
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.done,
