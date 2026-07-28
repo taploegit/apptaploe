@@ -17657,6 +17657,13 @@ enum _RedirectSortMode { nameAsc, genericUrlAsc, createdNewest, createdOldest }
 class _RedirectManagerViewState extends State<RedirectManagerView> {
   bool loading = false;
   _RedirectSortMode sortMode = _RedirectSortMode.createdNewest;
+  final TextEditingController search = TextEditingController();
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
 
   Future<void> _create({String? label, String? destinationUrl}) async {
     final user = taploeState.currentUser;
@@ -17727,7 +17734,15 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
   @override
   Widget build(BuildContext context) {
     final redirects = taploeState.cardRedirects;
-    final sortedRedirects = [...redirects]
+    final query = search.text.trim().toLowerCase();
+    final visibleRedirects = query.isEmpty
+        ? redirects
+        : redirects
+              .where(
+                (redirect) => redirect.publicUrl.toLowerCase().contains(query),
+              )
+              .toList();
+    final sortedRedirects = [...visibleRedirects]
       ..sort((a, b) => _compareRedirects(a, b, sortMode));
     final activeRedirects = redirects.where((item) => item.isActive).length;
     final totalClicks = redirects.fold<int>(
@@ -17803,24 +17818,26 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
           if (redirects.isEmpty)
             const _RedirectsEmptyState()
           else ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: _RedirectSortMenu(
-                value: sortMode,
-                onChanged: (value) => setState(() => sortMode = value),
-              ),
+            _RedirectToolbar(
+              search: search,
+              sortMode: sortMode,
+              onSearchChanged: (_) => setState(() {}),
+              onSortChanged: (value) => setState(() => sortMode = value),
             ),
             const SizedBox(height: 18),
-            ...sortedRedirects.map(
-              (redirect) => Padding(
-                padding: const EdgeInsets.only(bottom: 18),
-                child: _RedirectRow(
-                  redirect: redirect,
-                  loading: loading,
-                  onSave: _save,
+            if (sortedRedirects.isEmpty)
+              const _RedirectSearchEmptyState()
+            else
+              ...sortedRedirects.map(
+                (redirect) => Padding(
+                  padding: const EdgeInsets.only(bottom: 18),
+                  child: _RedirectRow(
+                    redirect: redirect,
+                    loading: loading,
+                    onSave: _save,
+                  ),
                 ),
               ),
-            ),
           ],
         ],
       ),
@@ -17877,6 +17894,93 @@ String _redirectSortEnglishLabel(_RedirectSortMode mode) {
       return 'Newest';
     case _RedirectSortMode.createdOldest:
       return 'Oldest';
+  }
+}
+
+class _RedirectToolbar extends StatelessWidget {
+  final TextEditingController search;
+  final _RedirectSortMode sortMode;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<_RedirectSortMode> onSortChanged;
+
+  const _RedirectToolbar({
+    required this.search,
+    required this.sortMode,
+    required this.onSearchChanged,
+    required this.onSortChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final searchBar = _RedirectSearchBar(
+      controller: search,
+      onChanged: onSearchChanged,
+    );
+    final sortMenu = _RedirectSortMenu(
+      value: sortMode,
+      onChanged: onSortChanged,
+    );
+    if (context.isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          searchBar,
+          const SizedBox(height: 12),
+          Align(alignment: Alignment.centerLeft, child: sortMenu),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        SizedBox(width: 360, child: searchBar),
+        const Spacer(),
+        sortMenu,
+      ],
+    );
+  }
+}
+
+class _RedirectSearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const _RedirectSearchBar({required this.controller, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TaploeTextScope.of(context);
+    return SizedBox(
+      height: 46,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        keyboardType: TextInputType.url,
+        textInputAction: TextInputAction.search,
+        style: GoogleFonts.dmSans(
+          color: context.text,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: InputDecoration(
+          hintText: t.text('Buscar Generic URL', 'Search Generic URL'),
+          prefixIcon: const Icon(Icons.search_rounded, size: 19),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Limpiar búsqueda',
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -17976,6 +18080,37 @@ class _RedirectsEmptyState extends StatelessWidget {
             'Puedes grabarla en una tarjeta NFC o imprimirla en QR y cambiar el destino después.',
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(color: context.muted, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RedirectSearchEmptyState extends StatelessWidget {
+  const _RedirectSearchEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      decoration: BoxDecoration(
+        color: TaploeColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TaploeColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search_off_rounded, color: context.muted, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'No encontramos una Generic URL con esa búsqueda.',
+              style: GoogleFonts.dmSans(
+                color: context.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
