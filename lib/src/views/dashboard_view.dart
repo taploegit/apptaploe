@@ -233,7 +233,7 @@ class _DashboardViewState extends State<DashboardView> {
                   label: t.text('Perfil', 'Profile'),
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.alt_route_rounded),
+                  icon: const Icon(Icons.sync_alt_rounded),
                   label: t.text('Redirección', 'Redirects'),
                 ),
                 NavigationDestination(
@@ -6225,7 +6225,7 @@ class _Sidebar extends StatelessWidget {
       (DashboardSection.cards, Icons.credit_card_rounded, t.cards),
       (
         DashboardSection.redirects,
-        Icons.alt_route_rounded,
+        Icons.sync_alt_rounded,
         t.text('Redirección', 'Redirects'),
       ),
       (DashboardSection.share, Icons.ios_share_rounded, t.share),
@@ -17778,7 +17778,7 @@ class _RedirectManagerViewState extends State<RedirectManagerView> {
             builder: (context, constraints) {
               final metrics = [
                 _CaptureFormMetric(
-                  icon: Icons.alt_route_rounded,
+                  icon: Icons.sync_alt_rounded,
                   value: '${redirects.length}',
                   label: 'URLs creadas',
                 ),
@@ -18061,7 +18061,7 @@ class _RedirectsEmptyState extends StatelessWidget {
       child: Column(
         children: [
           const Icon(
-            Icons.alt_route_rounded,
+            Icons.sync_alt_rounded,
             color: TaploeColors.blue,
             size: 42,
           ),
@@ -18142,7 +18142,7 @@ class _RedirectRow extends StatelessWidget {
           final header = Row(
             children: [
               const Icon(
-                Icons.alt_route_rounded,
+                Icons.sync_alt_rounded,
                 color: TaploeColors.blue,
                 size: 28,
               ),
