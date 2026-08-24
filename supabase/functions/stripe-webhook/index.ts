@@ -36,6 +36,11 @@ function statusFromStripe(status: string): string {
   return "expired";
 }
 
+function stripeWebhookSecret(): string {
+  return Deno.env.get("STRIPE_US_WEBHOOK_SECRET")?.trim() ||
+    requireEnv("STRIPE_WEBHOOK_SECRET");
+}
+
 async function claimEvent(event: Stripe.Event): Promise<"claimed" | "duplicate" | "busy"> {
   const { data, error } = await adminClient().rpc("claim_stripe_webhook_event", {
     p_event_id: event.id,
@@ -306,7 +311,7 @@ serve(async (req) => {
     event = await stripeClient().webhooks.constructEventAsync(
       rawBody,
       signature,
-      requireEnv("STRIPE_WEBHOOK_SECRET"),
+      stripeWebhookSecret(),
       undefined,
       Stripe.createSubtleCryptoProvider(),
     );

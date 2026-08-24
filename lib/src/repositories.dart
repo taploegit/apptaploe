@@ -688,7 +688,7 @@ class BillingRepository {
     String locale = 'es-MX',
   }) async {
     final response = await _db.functions.invoke(
-      'create-checkout-session',
+      'taploe-platform-checkout-session',
       body: {
         'plan': plan,
         'billingPeriod': billingPeriod,

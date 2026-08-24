@@ -33,6 +33,44 @@ function errorResponse(req: Request, code: string, message: string, status = 400
   return jsonResponse(req, { code, message }, status);
 }
 
+function errorStatus(error: unknown): number {
+  const raw = (error as { status?: unknown; statusCode?: unknown }).status ??
+    (error as { statusCode?: unknown }).statusCode;
+  return typeof raw === "number" && raw >= 400 && raw < 600 ? raw : 500;
+}
+
+function checkoutErrorCode(error: unknown): string {
+  if (!(error instanceof Error)) return "CHECKOUT_ERROR";
+  const stripeCode = (error as { code?: unknown }).code;
+  if (typeof stripeCode === "string" && stripeCode.trim()) {
+    return stripeCode;
+  }
+  return error.message || "CHECKOUT_ERROR";
+}
+
+function checkoutErrorMessage(error: unknown): string {
+  if (error instanceof Error && (error as { type?: unknown }).type === "StripeInvalidRequestError") {
+    return error.message;
+  }
+  return "No se pudo iniciar Checkout.";
+}
+
+function logCheckoutError(error: unknown) {
+  if (error instanceof Error) {
+    console.error("[taploe-platform-checkout-session]", {
+      name: error.name,
+      message: error.message,
+      type: (error as { type?: unknown }).type,
+      code: (error as { code?: unknown }).code,
+      param: (error as { param?: unknown }).param,
+      statusCode: (error as { statusCode?: unknown }).statusCode,
+      requestId: (error as { requestId?: unknown }).requestId,
+    });
+    return;
+  }
+  console.error("[taploe-platform-checkout-session]", error);
+}
+
 function cleanSlug(value: string): string {
   const slug = value
     .toLowerCase()
@@ -147,13 +185,55 @@ async function ensureStripeCustomer(
   authUserId: string,
   email: string,
 ): Promise<string> {
+  const stripe = stripeClient();
   const admin = adminClient();
+  const createCustomer = async (): Promise<string> => {
+    const customer = await stripe.customers.create({
+      email,
+      name: appUser.full_name ?? appUser.username,
+      metadata: {
+        taploe_user_id: appUser.id,
+        taploe_auth_user_id: authUserId,
+        source: "taploe",
+      },
+    });
+
+    await admin.from("stripe_customers").upsert({
+      user_id: appUser.id,
+      auth_user_id: authUserId,
+      stripe_customer_id: customer.id,
+      email,
+      updated_at: new Date().toISOString(),
+    });
+
+    return customer.id;
+  };
+  const customerExistsInCurrentStripeAccount = async (customerId: string): Promise<boolean> => {
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      return !("deleted" in customer && customer.deleted);
+    } catch (error) {
+      if (
+        (error as { type?: unknown }).type === "StripeInvalidRequestError" &&
+        (error as { code?: unknown }).code === "resource_missing"
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  };
+
   const { data: existingCustomer } = await admin
     .from("stripe_customers")
     .select("stripe_customer_id")
     .eq("user_id", appUser.id)
     .maybeSingle();
-  if (existingCustomer?.stripe_customer_id) return existingCustomer.stripe_customer_id;
+  if (existingCustomer?.stripe_customer_id) {
+    if (await customerExistsInCurrentStripeAccount(existingCustomer.stripe_customer_id)) {
+      return existingCustomer.stripe_customer_id;
+    }
+    return await createCustomer();
+  }
 
   const { data: existingSubscription } = await admin
     .from("billing_subscriptions")
@@ -164,6 +244,9 @@ async function ensureStripeCustomer(
     .limit(1)
     .maybeSingle();
   if (existingSubscription?.stripe_customer_id) {
+    if (!(await customerExistsInCurrentStripeAccount(existingSubscription.stripe_customer_id))) {
+      return await createCustomer();
+    }
     await admin.from("stripe_customers").upsert({
       user_id: appUser.id,
       auth_user_id: authUserId,
@@ -174,26 +257,7 @@ async function ensureStripeCustomer(
     return existingSubscription.stripe_customer_id;
   }
 
-  const stripe = stripeClient();
-  const customer = await stripe.customers.create({
-    email,
-    name: appUser.full_name ?? appUser.username,
-    metadata: {
-      taploe_user_id: appUser.id,
-      taploe_auth_user_id: authUserId,
-      source: "taploe",
-    },
-  });
-
-  await admin.from("stripe_customers").upsert({
-    user_id: appUser.id,
-    auth_user_id: authUserId,
-    stripe_customer_id: customer.id,
-    email,
-    updated_at: new Date().toISOString(),
-  });
-
-  return customer.id;
+  return await createCustomer();
 }
 
 function subscriptionStillBlocksCheckout(row: {
@@ -261,7 +325,7 @@ serve(async (req) => {
     const metadata = {
       taploe_user_id: appUser.id,
       taploe_auth_user_id: authUserId,
-      taploe_org_id: organization?.id ?? "",
+      ...(organization?.id ? { taploe_org_id: organization.id } : {}),
       taploe_scope: scope,
       taploe_plan: parsed.plan,
       billing_period: parsed.billingPeriod,
@@ -288,26 +352,17 @@ serve(async (req) => {
         price: stripePriceId(parsed.plan, parsed.market, parsed.billingPeriod),
         quantity: parsed.quantity,
       };
-    const trialText = parsed.language === "en"
-      ? "Free for 7 days. Cancel before your first charge."
-      : "Prueba gratis durante 7 dias. Puedes cancelar antes del primer cobro.";
-    const renewText = parsed.language === "en"
-      ? "Your subscription will renew automatically until canceled."
-      : "Tu suscripcion se renovara automaticamente hasta que la canceles.";
-
     const stripe = stripeClient();
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: appUser.id,
       line_items: [lineItem],
-      adaptive_pricing: { enabled: false },
       payment_method_collection: "always",
       locale: parsed.language === "es" ? "es-419" : "en",
       success_url: `${appUrl()}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl()}/plans?checkout=canceled`,
       metadata,
-      custom_text: { submit: { message: canUseTrial ? trialText : renewText } },
       subscription_data: {
         ...(canUseTrial
           ? {
@@ -326,12 +381,12 @@ serve(async (req) => {
 
     return jsonResponse(req, { checkoutUrl: session.url, sessionId: session.id });
   } catch (error) {
-    const status = (error as { status?: number }).status ?? 500;
-    const code = error instanceof Error ? error.message : "CHECKOUT_ERROR";
+    const status = errorStatus(error);
+    const code = checkoutErrorCode(error);
     if (status < 500) {
-      return errorResponse(req, code, "No se pudo iniciar Checkout.", status);
+      return errorResponse(req, code, checkoutErrorMessage(error), status);
     }
-    console.error("[create-checkout-session]", code);
+    logCheckoutError(error);
     return jsonResponse(req, { code: "CHECKOUT_ERROR", message: safeMessage(error) }, status);
   }
 });

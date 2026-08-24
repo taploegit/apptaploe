@@ -1,4 +1,4 @@
-[functions.create-checkout-session]
+[functions.taploe-platform-checkout-session]
 verify_jwt = true
 
 [functions.create-portal-session]
